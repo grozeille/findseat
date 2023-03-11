@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 @AllArgsConstructor
 @NoArgsConstructor
 public class TeamDeskResult {
+    private int roomSize;
     private List<Team> teams;
 
     private int score;
