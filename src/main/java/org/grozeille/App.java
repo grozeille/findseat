@@ -41,11 +41,11 @@ public class App
         // Random for each run ?
         Collections.shuffle(teams);
 
-        //Integer[] roomSizes = new Integer[]{6, 18, 39};
+        Integer[] roomSizes = new Integer[]{6, 18, 39};
         // 6 = 3 + 3
         // 18 = 3 + 6 + 6 + 3
         // 39 = 5 + 10 + 10 + 9 + 5
-        Integer[] roomSizes = new Integer[]{6, 10, 39};
+        //Integer[] roomSizes = new Integer[]{6, 10, 39};
 
         int score = 0;
 
@@ -57,8 +57,8 @@ public class App
             if (r.getRoomSize() == roomSizes[0]) {
                 subRoomSizes = new Integer[]{3, 3};
             } else if (r.getRoomSize() == roomSizes[1]) {
-                //subRoomSizes = new Integer[]{3, 6, 6, 3};
-                subRoomSizes = new Integer[]{4, 4, 2};
+                subRoomSizes = new Integer[]{3, 6, 6, 3};
+                //subRoomSizes = new Integer[]{4, 4, 2};
             } else { // rs == roomSizes[2]
                 subRoomSizes = new Integer[]{5, 10, 10, 9, 5};
             }
@@ -83,7 +83,7 @@ public class App
 
         // try to fit people in all "rooms", starting with the smallest one to the biggest one
         for(Integer rs : Arrays.stream(roomSizes).sorted().toList()) {
-            TeamDeskResult result = sumUp(teamsToDispatch, rs);
+            TeamDeskResult result = findBestTeamCombinationForTheRoom(teamsToDispatch, rs);
             Integer sum = result.getTotalSize();
 
             // if not all teams fit in this room, split the last team
@@ -112,33 +112,34 @@ public class App
         return endResult;
     }
 
-    static List<TeamDeskResult> dispatchTeamsToRoomRecursive(ArrayList<Team> numbers, int target, ArrayList<Team> partial) {
+    static List<TeamDeskResult> findAllTeamCombinationForTheRoom(ArrayList<Team> teamsToAllocate, int roomSize, ArrayList<Team> teamsAllocated) {
 
-        int sum = partial.stream().map(Team::getSize).reduce(0, Integer::sum);
+        int totalNumberPeopleInTheRoom = teamsAllocated.stream().map(Team::getSize).reduce(0, Integer::sum);
 
         // exact match or too high
-        if (sum >= target) {
+        if (totalNumberPeopleInTheRoom >= roomSize) {
             //String numbersString = partial.stream().map(Object::toString).collect(Collectors.joining("+"));
             //System.out.println(numbersString + "=" + sum);
-            return List.of(new TeamDeskResult(target, partial, 0));
+            return List.of(new TeamDeskResult(roomSize, teamsAllocated, 0));
         }
 
         List<TeamDeskResult> bestMatches = new ArrayList<>();
 
-        for(int i=0;i<numbers.size();i++) {
+
+        for(int i=0;i<teamsToAllocate.size();i++) {
             ArrayList<Team> remaining = new ArrayList<>();
-            Team n = numbers.get(i);
+            Team n = teamsToAllocate.get(i);
 
-            for (int j=i+1; j<numbers.size();j++) remaining.add(numbers.get(j));
+            for (int j=i+1; j<teamsToAllocate.size();j++) remaining.add(teamsToAllocate.get(j));
 
-            ArrayList<Team> partial_rec = new ArrayList<>(partial);
-            partial_rec.add(n);
+            ArrayList<Team> newTeamsAllocated = new ArrayList<>(teamsAllocated);
+            newTeamsAllocated.add(n);
 
-            List<TeamDeskResult> result = dispatchTeamsToRoomRecursive(remaining,target,partial_rec);
+            List<TeamDeskResult> result = findAllTeamCombinationForTheRoom(remaining,roomSize,newTeamsAllocated);
             for(TeamDeskResult r : result) {
-                sum = r.getTotalSize();
+                totalNumberPeopleInTheRoom = r.getTotalSize();
                 // exact match or too high
-                if (sum >= target)
+                if (totalNumberPeopleInTheRoom >= roomSize)
                     bestMatches.add(r);
             }
 
@@ -147,11 +148,14 @@ public class App
         return bestMatches;
     }
 
-    static TeamDeskResult sumUp(ArrayList<Team> numbers, int target) {
+    static TeamDeskResult findBestTeamCombinationForTheRoom(ArrayList<Team> teamsToAllocate, int roomSize) {
         final int maxPenalty = 10;
 
-        List<TeamDeskResult> results = dispatchTeamsToRoomRecursive(numbers, target, new ArrayList<>());
+        // find all possible combination to put teams in that room
+        List<TeamDeskResult> results = findAllTeamCombinationForTheRoom(teamsToAllocate, roomSize, new ArrayList<>());
 
+        // some combination can exceed the room size
+        // sorted by size (smaller to bigger)
         results = results.stream()
                 .sorted((o1, o2) -> {
                             int result = Integer.compare(o1.getTotalSize(), o2.getTotalSize());
@@ -162,21 +166,21 @@ public class App
                             }
                         })
                 .toList();
-
-        // sorted by size (smaller to bigger)
         Optional<TeamDeskResult> optionalFirst = results.stream().findFirst();
         TeamDeskResult first = optionalFirst.get();
 
-        // if best match found, that's it
-        if(first.getTotalSize() == target) {
+        // if best match found (fit exactly the room size), return it
+        if(first.getTotalSize() == roomSize) {
             return first;
         }
 
-        // else, try to score the best solution
+        // else, split the last team in half and find the best scenario
         for(TeamDeskResult r : results) {
             // split the last Team and compute the penalty of it
+            // having 1 person alone is the worst scenario
+            // but having a team of 10 split in half is OK
             Team last = r.getTeams().get(r.getTeams().size() - 1);
-            int sizeSubGroupA = target - (r.getTotalSize() - last.getSize());
+            int sizeSubGroupA = roomSize - (r.getTotalSize() - last.getSize());
             int sizeSubGroupB = last.getSize() - sizeSubGroupA;
             int min = Math.min(sizeSubGroupA, sizeSubGroupB);
             int penalty = Math.max(maxPenalty - min, 0);
@@ -188,6 +192,7 @@ public class App
             //System.out.println("target: " + target + " " + r.getTeams() + "=" + sum + " score: "+ r.getScore());
         }
 
+        // get the combination with the best score
         TeamDeskResult result = results.stream()
                 .sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore()))
                 .findFirst().get();
