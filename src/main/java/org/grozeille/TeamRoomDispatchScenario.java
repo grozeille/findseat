@@ -12,6 +12,8 @@ import java.util.stream.Stream;
 @NoArgsConstructor
 public class TeamRoomDispatchScenario {
     private int roomSize;
+
+    private String roomName;
     private List<Team> teams;
 
     private int score;
