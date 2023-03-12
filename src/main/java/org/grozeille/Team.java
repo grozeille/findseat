@@ -10,5 +10,5 @@ import lombok.NoArgsConstructor;
 public class Team {
     private String name;
     private Integer size;
-    private boolean teamDay;
+    private boolean mandatory;
 }

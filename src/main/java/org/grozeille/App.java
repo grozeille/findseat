@@ -29,12 +29,12 @@ public class App
         teams.add(new Team("C", 1, false));
         teams.add(new Team("D", 2, false));
         teams.add(new Team("E", 3, false));
-        teams.add(new Team("F", 9, false));
+        teams.add(new Team("F", 9, true));
         teams.add(new Team("G", 6, false));
-        teams.add(new Team("H", 7, false));
+        teams.add(new Team("H", 7, true));
         teams.add(new Team("I", 1, false));
         teams.add(new Team("J", 7, false));
-        teams.add(new Team("K", 11, false));
+        teams.add(new Team("K", 11, true));
         teams.add(new Team("L", 6, false));
         teams.add(new Team("M", 6, false));
 
@@ -47,43 +47,59 @@ public class App
         // 39 = 5 + 10 + 10 + 9 + 5
         //Integer[] roomSizes = new Integer[]{6, 10, 39};
 
-        int score = 0;
 
-        TeamEndResult endResult = dispatchTeamsToRooms(teams, roomSizes);
-        for(TeamDeskResult r : endResult.getDispatched()) {
-            System.out.println("Room(size=" + r.getRoomSize() + ", teams=("+r.getTeams()+"), score="+r.getScore()+")");
+        List<TeamDispatchScenario> teamDispatchScenarios = new ArrayList<>();
 
-            Integer[] subRoomSizes;
-            if (r.getRoomSize() == roomSizes[0]) {
-                subRoomSizes = new Integer[]{3, 3};
-            } else if (r.getRoomSize() == roomSizes[1]) {
-                subRoomSizes = new Integer[]{3, 6, 6, 3};
-                //subRoomSizes = new Integer[]{4, 4, 2};
-            } else { // rs == roomSizes[2]
-                subRoomSizes = new Integer[]{5, 10, 10, 9, 5};
+        // first, try to identify all scenarios to fit all people on the floor with all teams as mandatory
+        // consider the floor as a single room
+        List<TeamRoomDispatchScenario> allTeamCombinationForTheFloor = findAllTeamCombinationForTheRoom(teams, Arrays.stream(roomSizes).reduce(0, Integer::sum), new ArrayList<>());
+        long nbMandatoryTeams = teams.stream().filter(t -> t.isMandatory()).count();
+        for(TeamRoomDispatchScenario floorResult : allTeamCombinationForTheFloor) {
+            long resultNbMandatoryTeams = floorResult.getTeams().stream().filter(t -> t.isMandatory()).count();
+            if(resultNbMandatoryTeams == nbMandatoryTeams) {
+
+                int scenarioScore = 0;
+
+                // try to dispatch teams in the room and desks
+                TeamDispatchScenario scenario = dispatchTeamsToRooms(floorResult.getTeams(), roomSizes);
+                for(TeamRoomDispatchScenario r : scenario.getDispatched()) {
+                    System.out.println("Room(size=" + r.getRoomSize() + ", teams=("+r.getTeams()+"), score="+r.getScore()+")");
+
+                    Integer[] subRoomSizes;
+                    if (r.getRoomSize() == roomSizes[0]) {
+                        subRoomSizes = new Integer[]{3, 3};
+                    } else if (r.getRoomSize() == roomSizes[1]) {
+                        subRoomSizes = new Integer[]{3, 6, 6, 3};
+                        //subRoomSizes = new Integer[]{4, 4, 2};
+                    } else { // rs == roomSizes[2]
+                        subRoomSizes = new Integer[]{5, 10, 10, 9, 5};
+                    }
+                    TeamDispatchScenario subEndResult = dispatchTeamsToRooms(r.getTeams(), subRoomSizes);
+                    for(TeamRoomDispatchScenario sr : subEndResult.getDispatched()) {
+                        System.out.println("\tDesk(size=" + sr.getRoomSize() + ", teams=(" + sr.getTeams() + "), score=" + sr.getScore() + ")");
+                    }
+                    scenarioScore += subEndResult.totalScore();
+                    System.out.println("\tnot able to fit: "+subEndResult.getNotAbleToDispatch());
+                }
+                scenarioScore += scenario.totalScore();
+                System.out.println("not able to fit: "+scenario.getNotAbleToDispatch());
+
+                System.out.println("Total score: "+scenarioScore);
             }
-            TeamEndResult subEndResult = dispatchTeamsToRooms(r.getTeams(), subRoomSizes);
-            for(TeamDeskResult sr : subEndResult.getDispatched()) {
-                System.out.println("\tDesk(size=" + sr.getRoomSize() + ", teams=(" + sr.getTeams() + "), score=" + sr.getScore() + ")");
-            }
-            score += subEndResult.totalScore();
-            System.out.println("\tnot able to fit: "+subEndResult.getNotAbleToDispatch());
         }
-        score += endResult.totalScore();
-        System.out.println("not able to fit: "+endResult.getNotAbleToDispatch());
 
-        System.out.println("Total score: "+score);
+
     }
 
-    private static TeamEndResult dispatchTeamsToRooms(List<Team> teams, Integer[] roomSizes) {
+    private static TeamDispatchScenario dispatchTeamsToRooms(List<Team> teams, Integer[] roomSizes) {
         ArrayList<Team> teamsToDispatch = new ArrayList<>(teams);
 
-        TeamEndResult endResult = new TeamEndResult();
+        TeamDispatchScenario endResult = new TeamDispatchScenario();
         endResult.setDispatched(new ArrayList<>());
 
         // try to fit people in all "rooms", starting with the smallest one to the biggest one
         for(Integer rs : Arrays.stream(roomSizes).sorted().toList()) {
-            TeamDeskResult result = findBestTeamCombinationForTheRoom(teamsToDispatch, rs);
+            TeamRoomDispatchScenario result = findBestTeamCombinationForTheRoom(teamsToDispatch, rs);
             Integer sum = result.getTotalSize();
 
             // if not all teams fit in this room, split the last team
@@ -96,7 +112,7 @@ public class App
                 sum = result.getTotalSize();
 
                 // create a new "team" which is the second split of the last team, to be assigned to another room
-                Team splitLastTeam = new Team(lastTeam.getName()+"bis", sizeSubGroupB, lastTeam.isTeamDay());
+                Team splitLastTeam = new Team(lastTeam.getName()+"bis", sizeSubGroupB, lastTeam.isMandatory());
                 teamsToDispatch.add(splitLastTeam);
             }
 
@@ -112,7 +128,7 @@ public class App
         return endResult;
     }
 
-    static List<TeamDeskResult> findAllTeamCombinationForTheRoom(ArrayList<Team> teamsToAllocate, int roomSize, ArrayList<Team> teamsAllocated) {
+    static List<TeamRoomDispatchScenario> findAllTeamCombinationForTheRoom(List<Team> teamsToAllocate, int roomSize, ArrayList<Team> teamsAllocated) {
 
         int totalNumberPeopleInTheRoom = teamsAllocated.stream().map(Team::getSize).reduce(0, Integer::sum);
 
@@ -120,10 +136,10 @@ public class App
         if (totalNumberPeopleInTheRoom >= roomSize) {
             //String numbersString = partial.stream().map(Object::toString).collect(Collectors.joining("+"));
             //System.out.println(numbersString + "=" + sum);
-            return List.of(new TeamDeskResult(roomSize, teamsAllocated, 0));
+            return List.of(new TeamRoomDispatchScenario(roomSize, teamsAllocated, 0));
         }
 
-        List<TeamDeskResult> bestMatches = new ArrayList<>();
+        List<TeamRoomDispatchScenario> bestMatches = new ArrayList<>();
 
 
         for(int i=0;i<teamsToAllocate.size();i++) {
@@ -135,8 +151,8 @@ public class App
             ArrayList<Team> newTeamsAllocated = new ArrayList<>(teamsAllocated);
             newTeamsAllocated.add(n);
 
-            List<TeamDeskResult> result = findAllTeamCombinationForTheRoom(remaining,roomSize,newTeamsAllocated);
-            for(TeamDeskResult r : result) {
+            List<TeamRoomDispatchScenario> result = findAllTeamCombinationForTheRoom(remaining,roomSize,newTeamsAllocated);
+            for(TeamRoomDispatchScenario r : result) {
                 totalNumberPeopleInTheRoom = r.getTotalSize();
                 // exact match or too high
                 if (totalNumberPeopleInTheRoom >= roomSize)
@@ -148,11 +164,11 @@ public class App
         return bestMatches;
     }
 
-    static TeamDeskResult findBestTeamCombinationForTheRoom(ArrayList<Team> teamsToAllocate, int roomSize) {
+    static TeamRoomDispatchScenario findBestTeamCombinationForTheRoom(ArrayList<Team> teamsToAllocate, int roomSize) {
         final int maxPenalty = 10;
 
         // find all possible combination to put teams in that room
-        List<TeamDeskResult> results = findAllTeamCombinationForTheRoom(teamsToAllocate, roomSize, new ArrayList<>());
+        List<TeamRoomDispatchScenario> results = findAllTeamCombinationForTheRoom(teamsToAllocate, roomSize, new ArrayList<>());
 
         // some combination can exceed the room size
         // sorted by size (smaller to bigger)
@@ -166,8 +182,8 @@ public class App
                             }
                         })
                 .toList();
-        Optional<TeamDeskResult> optionalFirst = results.stream().findFirst();
-        TeamDeskResult first = optionalFirst.get();
+        Optional<TeamRoomDispatchScenario> optionalFirst = results.stream().findFirst();
+        TeamRoomDispatchScenario first = optionalFirst.get();
 
         // if best match found (fit exactly the room size), return it
         if(first.getTotalSize() == roomSize) {
@@ -175,7 +191,7 @@ public class App
         }
 
         // else, split the last team in half and find the best scenario
-        for(TeamDeskResult r : results) {
+        for(TeamRoomDispatchScenario r : results) {
             // split the last Team and compute the penalty of it
             // having 1 person alone is the worst scenario
             // but having a team of 10 split in half is OK
@@ -193,7 +209,7 @@ public class App
         }
 
         // get the combination with the best score
-        TeamDeskResult result = results.stream()
+        TeamRoomDispatchScenario result = results.stream()
                 .sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore()))
                 .findFirst().get();
         return result;

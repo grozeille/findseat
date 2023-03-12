@@ -9,9 +9,9 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class TeamEndResult {
+public class TeamDispatchScenario {
 
-    private List<TeamDeskResult> dispatched;
+    private List<TeamRoomDispatchScenario> dispatched;
 
     private List<Team> notAbleToDispatch;
 

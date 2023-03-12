@@ -10,7 +10,7 @@ import java.util.stream.Stream;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class TeamDeskResult {
+public class TeamRoomDispatchScenario {
     private int roomSize;
     private List<Team> teams;
 
