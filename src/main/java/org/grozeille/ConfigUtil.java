@@ -21,13 +21,13 @@ public class ConfigUtil {
      * roomB, deskGroupA, DeskBA001
      * @return
      */
-    public static List<Room> parseRoomsFile() {
+    public static List<Room> parseRoomsFile(String folder) {
         List<Room> rooms = new ArrayList<>();
-        String fileName = "rooms.csv";
+        String fileName = folder+"/rooms.csv";
         List<List<String>> rows = readCsv(fileName);
 
         // consider first line as header
-        rows = rows.subList(1, rows.size()-1);
+        rows.remove(0);
 
         String roomName = "";
         Room room = new Room();
@@ -64,13 +64,13 @@ public class ConfigUtil {
      * teamB, 0, Sydney Buffy
      * @return
      */
-    public static List<Team> parseTeamsFile() {
+    public static List<Team> parseTeamsFile(String folder) {
         List<Team> teams = new ArrayList<>();
-        String fileName = "teams.csv";
+        String fileName = folder+"/teams.csv";
         List<List<String>> rows = readCsv(fileName);
 
         // consider first line as header
-        rows = rows.subList(1, rows.size()-1);
+        rows.remove(0);
 
         String teamName = "";
         Team team = new Team();
