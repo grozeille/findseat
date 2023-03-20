@@ -3,9 +3,15 @@ package org.grozeille;
 import com.opencsv.CSVWriter;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.DefaultIndexedColorMap;
+import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.time.DayOfWeek;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -20,24 +26,122 @@ public class App
 
     public static void main(String[] args ) {
         List<Room> rooms = ConfigUtil.parseRoomsFile("test1");
+        Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
         final Integer totalSizeForAllRooms = rooms.stream().map(Room::roomSize).reduce(0, Integer::sum);
 
 
         //List<Team> teams = ConfigUtil.parseTeamsFile("test2");
-        Map<Integer, List<Team>> teamsByDay = ConfigUtil.parseTeamForWeekFile("teams");
+        //Map<Integer, List<Team>> teamsByDay = ConfigUtil.parseTeamForWeekFile("teams");
+        Map<Integer, List<Team>> teamsByDay = new HashMap<>();
 
-        //int day = random.nextInt(4) + 1;
-        int day = 2;
+        Map<Integer, Map<String, Pair<Team,People>>> deskPeopleMappingPerDay = new HashMap<>();
+
+        for(int day = 1; day <= 5; day++) {
+
+            List<Team> teams = ConfigUtil.getSampleTeamForDay(day, totalSizeForAllRooms);
+            //List<Team> teams = teamsByDay.get(day);
+            teamsByDay.put(day, teams);
+
+            Pair<TeamDispatchScenario, Map<String, TeamDispatchScenario>> bestScenarioResult = findBestScenario(day, rooms, teams);
+            TeamDispatchScenario bestScenario = bestScenarioResult.getLeft();
+            Map<String, TeamDispatchScenario> bestDeskGroupScenario = bestScenarioResult.getRight();
+
+            // Assign a desk to all people
+            List<People> peopleWithDesk = new ArrayList<>();
+            Map<String, Pair<Team,People>> deskPeopleMapping = new HashMap<>();
+            for(TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
+                Room room = roomsByName.get(r.getRoomName());
+                for(TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
+                    // get all desks of that desk group in that room
+                    List<String> desks = room.getDesksGroups().get(sr.getRoomName());
+                    Iterator<String> desksIterator = desks.iterator();
+                    // assign a desk for each people in that desk group
+                    for(Team teamsInDeskGroup : sr.getTeams()) {
+                        for(People peopleInDeskGroup : teamsInDeskGroup.getMembers()) {
+                            deskPeopleMapping.put(desksIterator.next(), ImmutablePair.of(teamsInDeskGroup, peopleInDeskGroup));
+                            peopleWithDesk.add(peopleInDeskGroup);
+                        }
+                    }
+                }
+            }
+
+            deskPeopleMappingPerDay.put(day, deskPeopleMapping);
+
+            exportAllPeople(teams, day);
+            exportPeopleWithoutDesk(teams, peopleWithDesk, day);
+        }
+
+
+        try {
+            URL resource = App.class.getClassLoader().getResource("floor_mapping.xlsx");
+            FileInputStream file = new FileInputStream(new File(resource.toURI()));
+            Workbook workbook = new XSSFWorkbook(file);
+
+            for(int day = 1; day <= 5; day++) {
+                // create a mapping of team/color
+                String[] colors = new String[]{
+                        "#838CA9", "#A4D78D", "#FFE485", "#FFC598", "#E58787",
+                        "#98EBEC", "#70A3CA", "#6994AE", "#FACF7F", "#F7A072",
+                        "#FF0F80", "#2B50AA", "#FF9FE5", "#FFD4D4", "#FF858D"};
+
+                Map<String, String> teamColorMap = new HashMap<>();
+                List<Team> allDispatchedTeams = teamsByDay.get(day);
+                for (int i = 0; i < allDispatchedTeams.size(); i++) {
+                    teamColorMap.put(allDispatchedTeams.get(i).getName(), colors[i % colors.length]);
+                }
+
+                // clone the floor plan for a specific day to replace desk names by the assigned people
+                workbook.cloneSheet(0);
+                workbook.setSheetName(workbook.getNumberOfSheets()-1, DayOfWeek.of(day).name());
+
+                Sheet sheet = workbook.getSheetAt(workbook.getNumberOfSheets()-1);
+                for (Row row : sheet) {
+                    for (Cell cell : row) {
+                        String currentCellValue = cell.getStringCellValue();
+                        if (!currentCellValue.isEmpty()) {
+                            Pair<Team, People> peopleInTeam = deskPeopleMappingPerDay.get(day).get(currentCellValue);
+                            if (peopleInTeam != null) {
+                                String newCellValue = peopleInTeam.getLeft().getName() + " " + peopleInTeam.getRight().getEmail();
+                                cell.setCellValue(newCellValue);
+
+                                CellStyle cellStyle = cell.getSheet().getWorkbook().createCellStyle();
+
+                                String hexaColor = teamColorMap.get(peopleInTeam.getLeft().getName().substring(0, 4));
+                                if(hexaColor == null) {
+                                    System.out.println("DEBUG");
+                                }
+                                XSSFColor color = new XSSFColor(hexaToRgb(hexaColor));
+
+                                cellStyle.setFillForegroundColor(color);
+                                cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                                cell.setCellStyle(cellStyle);
+                            } else {
+                                cell.setCellValue("EMPTY");
+                            }
+                        }
+                    }
+                }
+            }
+
+            File floorPlanOutputExcelFile = new File("target/output.xlsx");
+            if(floorPlanOutputExcelFile.exists()) {
+                floorPlanOutputExcelFile.delete();
+            }
+            workbook.write(new FileOutputStream(floorPlanOutputExcelFile));
+
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static Pair<TeamDispatchScenario, Map<String, TeamDispatchScenario>> findBestScenario(int day, List<Room> rooms, List<Team> teams) {
+        System.out.println(CONSOLE_SEPARATOR);
         System.out.println("Day: "+day);
-        //List<Team> teams = teamsByDay.get(day);
 
-        List<Team> teams = ConfigUtil.getSampleTeamForDay(day, totalSizeForAllRooms);
-
-
-        final Integer totalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
-
+        final Integer totalSizeForAllRooms = rooms.stream().map(Room::roomSize).reduce(0, Integer::sum);
         Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
 
+        final Integer totalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
 
         System.out.println(CONSOLE_SEPARATOR);
         for(Room r : rooms) {
@@ -144,76 +248,51 @@ public class App
         System.out.println("not able to fit: "+bestScenario.getNotAbleToDispatch());
         System.out.println("Total score: "+bestScenarioScore);
 
-        // build the CSV to mimic the layout of the floor
-        // in all rooms, and all desk groups, for all teams assigned to that desk group, assign a specific desk for each members
-        List<People> peopleWithDesk = new ArrayList<>();
-        Map<String, Pair<Team,People>> deskPeopleMapping = new HashMap<>();
-        for(TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
-            Room room = roomsByName.get(r.getRoomName());
-            for(TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
-                // get all desks of that desk group in that room
-                List<String> desks = room.getDesksGroups().get(sr.getRoomName());
-                Iterator<String> desksIterator = desks.iterator();
-                // assign a desk for each people in that desk group
-                for(Team teamsInDeskGroup : sr.getTeams()) {
-                    for(People peopleInDeskGroup : teamsInDeskGroup.getMembers()) {
-                        deskPeopleMapping.put(desksIterator.next(), ImmutablePair.of(teamsInDeskGroup, peopleInDeskGroup));
-                        peopleWithDesk.add(peopleInDeskGroup);
-                    }
-                }
-            }
-        }
+        return ImmutablePair.of(bestScenario, bestDeskGroupScenario);
+    }
 
-        // read a map of the floor
+    private static void exportPeopleWithoutDesk(List<Team> teams, List<People> peopleWithDesk, int day) {
         List<String[]> output = new ArrayList<>();
-        List<List<String>> floorMapping = ConfigUtil.readCsv("floor_mapping.csv");
-        for(List<String> row : floorMapping) {
-            List<String> outputRow = new ArrayList<>();
 
-            for(String column: row) {
-                String outputCell = "";
-                if(!column.isEmpty()) {
-                    Pair<Team, People> peopleInTeam = deskPeopleMapping.get(column);
-                    if(peopleInTeam == null) {
-                        System.out.println("Nobody assigned for desk "+column+" ?");
-                    }
-                    else {
-                        outputCell = peopleInTeam.getLeft().getName() + " " +
-                                peopleInTeam.getRight().getEmail();
-                    }
-                }
-                outputRow.add(outputCell);
-            }
-
-            output.add(outputRow.toArray(new String[0]));
+        List<People> allPeople = teams.stream().flatMap((Function<Team, Stream<People>>) team -> team.getMembers().stream()).toList();
+        allPeople = new ArrayList<>(allPeople);
+        allPeople.removeAll(peopleWithDesk);
+        for(People p : allPeople) {
+            String outputCell = p.getEmail();
+            output.add(new String[]{outputCell});
+            System.out.println("People without desk: "+p);
         }
-
-        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/output.csv"))) {
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/people_without_desk_"+DayOfWeek.of(day).name()+".csv"))) {
             csvWriter.writeAll(output);
         } catch (IOException e) {
             throw new RuntimeException("Not able to write output CSV", e);
         }
+    }
 
-
-        output = new ArrayList<>();
+    private static void exportAllPeople(List<Team> teams, int day) {
+        List<String[]> output = new ArrayList<>();
         for(Team t : teams) {
             for(People p : t.getMembers()) {
                 String outputCell = t.getName() + " " + p.getEmail();
                 output.add(new String[]{outputCell});
             }
         }
-        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/allpeople.csv"))) {
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/all_people_"+DayOfWeek.of(day).name()+".csv"))) {
             csvWriter.writeAll(output);
         } catch (IOException e) {
             throw new RuntimeException("Not able to write output CSV", e);
         }
+    }
 
-        List<People> allPeople = teams.stream().flatMap((Function<Team, Stream<People>>) team -> team.getMembers().stream()).toList();
-        allPeople = new ArrayList<>(allPeople);
-        allPeople.removeAll(peopleWithDesk);
-        for(People p : allPeople) {
-            System.out.println("People without desk: "+p);
+    static  byte[] hexaToRgb(String hexaColor) {
+        if(hexaColor.startsWith("#")) {
+            hexaColor = hexaColor.substring(1);
         }
+        int resultRed = Integer.valueOf(hexaColor.substring(0, 2), 16);
+        int resultGreen = Integer.valueOf(hexaColor.substring(2, 4), 16);
+        int resultBlue = Integer.valueOf(hexaColor.substring(4, 6), 16);
+
+        return new byte[]{(byte) resultRed, (byte) resultGreen, (byte) resultBlue};
     }
 
     static TeamDispatchScenario findBestDispatchScenariosForAllRooms(List<Team> teams, List<Room> rooms) {
@@ -368,13 +447,6 @@ public class App
 
         teamA.setMembers(team.getMembers().subList(0, sizeSubGroupA));
         teamB.setMembers(team.getMembers().subList(sizeSubGroupA, team.getSize()));
-
-        if(teamA.getSize() != teamA.getMembers().size()) {
-            System.out.println("WTF");
-        }
-        if(teamB.getSize() != teamB.getMembers().size()) {
-            System.out.println("WTF");
-        }
 
         return ImmutablePair.of(teamA, teamB);
     }
