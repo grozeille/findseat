@@ -1,0 +1,5 @@
+Team Name,First Name,Last Name,Email,Manager Email,Monday,Tuesday,Wednesday,Thursday,Friday,KeepEmpty
+TeamC,John4,Doe,john4.doe@company.com,the.boss@company.com,T,,T,,,
+TeamC,John5,Doe,john5.doe@company.com,the.boss@company.com,T,,,,,
+TeamD,John6,Doe,john6.doe@company.com,the.boss@company.com,T,F,T,,,
+TeamD,John7,Doe,john7.doe@company.com,the.boss@company.com,,,T,,F,

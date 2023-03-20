@@ -1,8 +1,11 @@
 package org.grozeille;
 
+import com.opencsv.CSVWriter;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -16,123 +19,20 @@ public class App
     public static final String CONSOLE_SEPARATOR = "================";
 
     public static void main(String[] args ) {
-
-        /**
-         *  Group 1: 6 + 20 = 26
-         *  Group 2: 17 + 20 = 37
-         *  Group 3: 3 + 12 + 8 = 23
-         *  Group 4: 5 + 15 + 6 = 26
-         *  Group 5: 9 + 9 + 12 = 30
-         *
-         *  Monday : Group 1 + 5 = 26 + 30 = 56
-         *  Tuesday: Group 3 + 4 = 23 + 26 = 49
-         *  Wednesday: Group 1 + 2 = 26 + 37 = 63
-         *  Thursday: Group 4 + 5 = 26 + 30 = 56
-         *  Friday: Group 2 + 3 = 37 + 23 = 60
-         *
-         */
-
         List<Room> rooms = ConfigUtil.parseRoomsFile("test1");
         final Integer totalSizeForAllRooms = rooms.stream().map(Room::roomSize).reduce(0, Integer::sum);
 
 
         //List<Team> teams = ConfigUtil.parseTeamsFile("test2");
-        Map<String, Map<String, Team>> groups = new HashMap<>();
-        Map<String,Team> group1 = new HashMap<>();
-        group1.put("G1T1", new Team("G1T1", 6, true));
-        group1.put("G1T2", new Team("G1T2", 20, true));
-        groups.put("G1", group1);
+        Map<Integer, List<Team>> teamsByDay = ConfigUtil.parseTeamForWeekFile("teams");
 
-        Map<String,Team> group2 = new HashMap<>();
-        group2.put("G2T1", new Team("G2T1", 17, true));
-        group2.put("G2T2", new Team("G2T2", 20, true));
-        groups.put("G2", group2);
-
-        Map<String,Team> group3 = new HashMap<>();
-        group3.put("G3T1", new Team("G3T1", 3, true));
-        group3.put("G3T2", new Team("G3T2", 12, true));
-        group3.put("G3T3", new Team("G3T3", 8, true));
-        groups.put("G3", group3);
-
-        Map<String,Team> group4 = new HashMap<>();
-        group4.put("G4T1", new Team("G4T1", 5, true));
-        group4.put("G4T2", new Team("G4T2", 15, true));
-        group4.put("G4T3", new Team("G4T3", 6, true));
-        groups.put("G4", group4);
-
-        Map<String,Team> group5 = new HashMap<>();
-        group5.put("G5T1", new Team("G5T1", 9, true));
-        group5.put("G5T2", new Team("G5T2", 9, true));
-        group5.put("G5T3", new Team("G5T3", 12, true));
-        groups.put("G5", group5);
-
-        Map<Integer, List<Team>> days = new HashMap<>();
-        days.put(1, new ArrayList<>());
-        days.get(1).addAll(groups.get("G1").values());
-        days.get(1).addAll(groups.get("G5").values());
-
-        days.put(2, new ArrayList<>());
-        days.get(2).addAll(groups.get("G3").values());
-        days.get(2).addAll(groups.get("G4").values());
-
-        days.put(3, new ArrayList<>());
-        days.get(3).addAll(groups.get("G1").values());
-        days.get(3).addAll(groups.get("G2").values());
-
-        days.put(4, new ArrayList<>());
-        days.get(4).addAll(groups.get("G4").values());
-        days.get(4).addAll(groups.get("G5").values());
-
-        days.put(5, new ArrayList<>());
-        days.get(5).addAll(groups.get("G2").values());
-        days.get(5).addAll(groups.get("G3").values());
-
-        Random random = new Random();
         //int day = random.nextInt(4) + 1;
-        int day = 1;
+        int day = 2;
         System.out.println("Day: "+day);
+        //List<Team> teams = teamsByDay.get(day);
 
-        List<Team> teams = days.get(day);
+        List<Team> teams = ConfigUtil.getSampleTeamForDay(day, totalSizeForAllRooms);
 
-        // simulate vacations in the mandatory teams
-        int workingDays = 250;
-        int vacations = 4*5 + 5; // 4 weeks + 5 sick days
-        for(Team t: teams) {
-            int newSize = t.getSize();
-            for(int i = 0; i < t.getSize(); i++) {
-                boolean isOff = random.nextInt(workingDays) <= vacations;
-                if(isOff) {
-                    newSize--;
-                }
-            }
-            t.setSize(newSize);
-        }
-
-        Integer mandatoryTotalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
-
-        // simulate additional people for optional day
-        List<Team> allTeams = groups.values().stream()
-                .flatMap((Function<Map<String, Team>, Stream<Team>>) stringTeamMap -> stringTeamMap.values().stream())
-                .toList();
-        List<Team> otherTeams = new ArrayList<>(allTeams);
-        otherTeams.removeAll(teams);
-        // we can observe in reality that we have between 10 and 15 people more than available space each day
-        // simulate teams until we reach that limit
-        int toReach = (totalSizeForAllRooms + random.nextInt(5) + 10) - mandatoryTotalSizeTeams;
-        Collections.shuffle(otherTeams, random);
-        List<Team> additionalTeams = new ArrayList<>();
-        int additionalPeople = 0;
-        for(Team t : otherTeams) {
-            t.setSize(Math.min(t.getSize(), random.nextInt(4)+1));
-            t.setMandatory(false);
-            additionalTeams.add(t);
-            additionalPeople += t.getSize();
-            if(additionalPeople >= toReach) {
-                break;
-            }
-        }
-
-        teams.addAll(additionalTeams);
 
         final Integer totalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
 
@@ -180,9 +80,6 @@ public class App
         int bestScenarioScore = Integer.MIN_VALUE;
         TeamDispatchScenario bestScenario = null;
         Map<String, TeamDispatchScenario> bestDeskGroupScenario = null;
-
-        // TODO: to the score, keep best scenario that fit the maximum number of people
-        // TODO: display people who can't fit
 
         int scenarioCpt = 0;
         // for each scenario, try to dispatch teams in the rooms
@@ -246,6 +143,77 @@ public class App
         }
         System.out.println("not able to fit: "+bestScenario.getNotAbleToDispatch());
         System.out.println("Total score: "+bestScenarioScore);
+
+        // build the CSV to mimic the layout of the floor
+        // in all rooms, and all desk groups, for all teams assigned to that desk group, assign a specific desk for each members
+        List<People> peopleWithDesk = new ArrayList<>();
+        Map<String, Pair<Team,People>> deskPeopleMapping = new HashMap<>();
+        for(TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
+            Room room = roomsByName.get(r.getRoomName());
+            for(TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
+                // get all desks of that desk group in that room
+                List<String> desks = room.getDesksGroups().get(sr.getRoomName());
+                Iterator<String> desksIterator = desks.iterator();
+                // assign a desk for each people in that desk group
+                for(Team teamsInDeskGroup : sr.getTeams()) {
+                    for(People peopleInDeskGroup : teamsInDeskGroup.getMembers()) {
+                        deskPeopleMapping.put(desksIterator.next(), ImmutablePair.of(teamsInDeskGroup, peopleInDeskGroup));
+                        peopleWithDesk.add(peopleInDeskGroup);
+                    }
+                }
+            }
+        }
+
+        // read a map of the floor
+        List<String[]> output = new ArrayList<>();
+        List<List<String>> floorMapping = ConfigUtil.readCsv("floor_mapping.csv");
+        for(List<String> row : floorMapping) {
+            List<String> outputRow = new ArrayList<>();
+
+            for(String column: row) {
+                String outputCell = "";
+                if(!column.isEmpty()) {
+                    Pair<Team, People> peopleInTeam = deskPeopleMapping.get(column);
+                    if(peopleInTeam == null) {
+                        System.out.println("Nobody assigned for desk "+column+" ?");
+                    }
+                    else {
+                        outputCell = peopleInTeam.getLeft().getName() + " " +
+                                peopleInTeam.getRight().getEmail();
+                    }
+                }
+                outputRow.add(outputCell);
+            }
+
+            output.add(outputRow.toArray(new String[0]));
+        }
+
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/output.csv"))) {
+            csvWriter.writeAll(output);
+        } catch (IOException e) {
+            throw new RuntimeException("Not able to write output CSV", e);
+        }
+
+
+        output = new ArrayList<>();
+        for(Team t : teams) {
+            for(People p : t.getMembers()) {
+                String outputCell = t.getName() + " " + p.getEmail();
+                output.add(new String[]{outputCell});
+            }
+        }
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/allpeople.csv"))) {
+            csvWriter.writeAll(output);
+        } catch (IOException e) {
+            throw new RuntimeException("Not able to write output CSV", e);
+        }
+
+        List<People> allPeople = teams.stream().flatMap((Function<Team, Stream<People>>) team -> team.getMembers().stream()).toList();
+        allPeople = new ArrayList<>(allPeople);
+        allPeople.removeAll(peopleWithDesk);
+        for(People p : allPeople) {
+            System.out.println("People without desk: "+p);
+        }
     }
 
     static TeamDispatchScenario findBestDispatchScenariosForAllRooms(List<Team> teams, List<Room> rooms) {
@@ -255,7 +223,8 @@ public class App
         endResult.setDispatched(new ArrayList<>());
 
         // try to fit people in all "rooms", starting with the smallest one to the biggest one
-        rooms = rooms.stream().sorted(Comparator.comparingInt(Room::roomSize)).toList();
+        //rooms = rooms.stream().sorted(Comparator.comparingInt(Room::roomSize)).toList();
+        // TODO: don't do it for desk groups to keep the right order
 
         for(Room room : rooms) {
 
@@ -392,10 +361,20 @@ public class App
         int sizeSubGroupB = team.getSize() - sizeSubGroupA;
 
         // re-create the team but with only the members who fit
-        Team teamA = new Team(team.getName()+"_A", sizeSubGroupA, team.isMandatory());
+        Team teamA = new Team(team.getName()+"_A", sizeSubGroupA, team.isMandatory(), team.getManagerEmail());
 
         // create a new "team" which is the second split of the last team, to be assigned to another room
-        Team teamB = new Team(team.getName()+"_B", sizeSubGroupB, team.isMandatory());
+        Team teamB = new Team(team.getName()+"_B", sizeSubGroupB, team.isMandatory(), team.getManagerEmail());
+
+        teamA.setMembers(team.getMembers().subList(0, sizeSubGroupA));
+        teamB.setMembers(team.getMembers().subList(sizeSubGroupA, team.getSize()));
+
+        if(teamA.getSize() != teamA.getMembers().size()) {
+            System.out.println("WTF");
+        }
+        if(teamB.getSize() != teamB.getMembers().size()) {
+            System.out.println("WTF");
+        }
 
         return ImmutablePair.of(teamA, teamB);
     }
