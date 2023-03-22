@@ -1,16 +1,17 @@
 package org.grozeille;
 
 import com.opencsv.CSVReader;
+import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvValidationException;
 import net.datafaker.Faker;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.*;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -159,6 +160,66 @@ public class ConfigUtil {
         return teamsByDay;
     }
 
+    private static Map<String, Map<String, Team>> cachedSampleAllTeamByGroup;
+
+    public static Map<String, Map<String, Team>> getSampleAllTeamByGroup() {
+        Faker faker = new Faker();
+
+        if(cachedSampleAllTeamByGroup == null) {
+            cachedSampleAllTeamByGroup = new HashMap<>();
+            Map<String,Team> group1 = new HashMap<>();
+            group1.put("G1T1", new Team("G1T1", 6, true, ""));
+            group1.put("G1T2", new Team("G1T2", 20, true, ""));
+            cachedSampleAllTeamByGroup.put("G1", group1);
+
+            Map<String,Team> group2 = new HashMap<>();
+            group2.put("G2T1", new Team("G2T1", 17, true, ""));
+            group2.put("G2T2", new Team("G2T2", 20, true, ""));
+            cachedSampleAllTeamByGroup.put("G2", group2);
+
+            Map<String,Team> group3 = new HashMap<>();
+            group3.put("G3T1", new Team("G3T1", 3, true, ""));
+            group3.put("G3T2", new Team("G3T2", 12, true, ""));
+            group3.put("G3T3", new Team("G3T3", 8, true, ""));
+            cachedSampleAllTeamByGroup.put("G3", group3);
+
+            Map<String,Team> group4 = new HashMap<>();
+            group4.put("G4T1", new Team("G4T1", 5, true, ""));
+            group4.put("G4T2", new Team("G4T2", 15, true, ""));
+            group4.put("G4T3", new Team("G4T3", 6, true, ""));
+            cachedSampleAllTeamByGroup.put("G4", group4);
+
+            Map<String,Team> group5 = new HashMap<>();
+            group5.put("G5T1", new Team("G5T1", 9, true, ""));
+            group5.put("G5T2", new Team("G5T2", 9, true, ""));
+            group5.put("G5T3", new Team("G5T3", 12, true, ""));
+            cachedSampleAllTeamByGroup.put("G5", group5);
+
+            for(Map<String, Team> teams : cachedSampleAllTeamByGroup.values()) {
+                for(Team t : teams.values()) {
+                    String managerEmail = (faker.name().firstName()+"."+faker.name().lastName()+"@worldcompany.com").toLowerCase(Locale.ROOT);
+                    t.setManagerEmail(managerEmail);
+                    for(int cpt = 0; cpt < t.getSize(); cpt++) {
+                        String firstname = faker.name().firstName();
+                        String lastname = faker.name().lastName();
+                        String email = (firstname+"."+lastname+"@worldcompany.com").toLowerCase(Locale.ROOT);
+                        t.getMembers().add(new People(firstname, lastname, email));
+                    }
+                }
+            }
+        }
+
+        Map<String, Map<String, Team>> result = new HashMap<>();
+        for(Map.Entry<String, Map<String, Team>> group : ConfigUtil.cachedSampleAllTeamByGroup.entrySet()) {
+            Map<String, Team> newTeam = new HashMap<>();
+            result.put(group.getKey(), newTeam);
+            for(Map.Entry<String, Team> team : group.getValue().entrySet()) {
+                newTeam.put(team.getKey(), (Team)team.getValue().clone());
+            }
+        }
+        return result;
+    }
+
     /**
      *  Group 1: 6 + 20 = 26
      *  Group 2: 17 + 20 = 37
@@ -174,34 +235,7 @@ public class ConfigUtil {
      *
      */
     public static List<Team> getSampleTeamForDay(int day, int totalSizeForAllRooms) {
-        Map<String, Map<String, Team>> groups = new HashMap<>();
-        Map<String,Team> group1 = new HashMap<>();
-        group1.put("G1T1", new Team("G1T1", 6, true, ""));
-        group1.put("G1T2", new Team("G1T2", 20, true, ""));
-        groups.put("G1", group1);
-
-        Map<String,Team> group2 = new HashMap<>();
-        group2.put("G2T1", new Team("G2T1", 17, true, ""));
-        group2.put("G2T2", new Team("G2T2", 20, true, ""));
-        groups.put("G2", group2);
-
-        Map<String,Team> group3 = new HashMap<>();
-        group3.put("G3T1", new Team("G3T1", 3, true, ""));
-        group3.put("G3T2", new Team("G3T2", 12, true, ""));
-        group3.put("G3T3", new Team("G3T3", 8, true, ""));
-        groups.put("G3", group3);
-
-        Map<String,Team> group4 = new HashMap<>();
-        group4.put("G4T1", new Team("G4T1", 5, true, ""));
-        group4.put("G4T2", new Team("G4T2", 15, true, ""));
-        group4.put("G4T3", new Team("G4T3", 6, true, ""));
-        groups.put("G4", group4);
-
-        Map<String,Team> group5 = new HashMap<>();
-        group5.put("G5T1", new Team("G5T1", 9, true, ""));
-        group5.put("G5T2", new Team("G5T2", 9, true, ""));
-        group5.put("G5T3", new Team("G5T3", 12, true, ""));
-        groups.put("G5", group5);
+        Map<String, Map<String, Team>> groups = getSampleAllTeamByGroup();
 
         Map<Integer, List<Team>> days = new HashMap<>();
         days.put(1, new ArrayList<>());
@@ -257,7 +291,9 @@ public class ConfigUtil {
         List<Team> additionalTeams = new ArrayList<>();
         int additionalPeople = 0;
         for(Team t : otherTeams) {
-            t.setSize(Math.min(t.getSize(), random.nextInt(4)+1));
+            // max 4 people of the same team are going to come the same optional day
+            t.setSize(random.nextInt(Math.min(t.getSize(), 4)));
+            t.setMembers(t.getMembers().subList(0, t.getSize()));
             t.setMandatory(false);
             additionalTeams.add(t);
             additionalPeople += t.getSize();
@@ -267,19 +303,53 @@ public class ConfigUtil {
         }
 
         teams.addAll(additionalTeams);
-        Faker faker = new Faker();
-        for(Team t: teams) {
-            String managerEmail = (faker.name().firstName()+"."+faker.name().lastName()+"@worldcompany.com").toLowerCase(Locale.ROOT);
-            t.setManagerEmail(managerEmail);
-            for(int cpt = 0; cpt < t.getSize(); cpt++) {
-                String firstname = faker.name().firstName();
-                String lastname = faker.name().lastName();
-                String email = (firstname+"."+lastname+"@worldcompany.com").toLowerCase(Locale.ROOT);
-                t.getMembers().add(new People(firstname, lastname, email));
-            }
-        }
 
         return teams;
+    }
+
+    public static Map<Integer, List<Team>> getSampleTeamForWeek(int totalSizeForAllRooms) {
+        Map<Integer, List<Team>> teamsByDay = new HashMap<>();
+        for(int day = 1; day <= 5; day++) {
+            LinkedList<Team> teams = new LinkedList<>(ConfigUtil.getSampleTeamForDay(day, totalSizeForAllRooms));
+            teamsByDay.put(day, teams);
+        }
+
+        return teamsByDay;
+    }
+
+    public static void saveTeamForWeekFile(Map<Integer, List<Team>> days) {
+        Map<String, String[]> peopleRows = new HashMap<>();
+        for(Map.Entry<Integer, List<Team>> day : days.entrySet()) {
+            for(Team t : day.getValue()) {
+                for(People p : t.getMembers()) {
+                    String[] currentPeopleRow;
+                    if(peopleRows.containsKey(p.getEmail())) {
+                        currentPeopleRow = peopleRows.get(p.getEmail());
+                    } else {
+                        currentPeopleRow = new String[10];
+                        currentPeopleRow[0] = t.getName();
+                        currentPeopleRow[1] = p.getFirstname();
+                        currentPeopleRow[2] = p.getLastname();
+                        currentPeopleRow[3] = p.getEmail();
+                        currentPeopleRow[4] = t.getManagerEmail();
+                        for(int cpt = 5; cpt < 10; cpt++) {
+                            currentPeopleRow[cpt] = "";
+                        }
+                        peopleRows.put(p.getEmail(), currentPeopleRow);
+                    }
+                    currentPeopleRow[4+day.getKey()] = t.isMandatory() ? "T" : "F";
+                }
+            }
+        }
+        List<String[]> output = new ArrayList<>();
+        output.add(new String[]{"Team Name","First Name","Last Name","Email","Manager Email",
+                "Monday","Tuesday","Wednesday","Thursday","Friday","KeepEmpty"});
+        output.addAll(peopleRows.values().stream().sorted((o1, o2) -> StringUtils.compare(o1[0], o2[0])).toList());
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/all_people_week.csv"))) {
+            csvWriter.writeAll(output);
+        } catch (IOException e) {
+            throw new RuntimeException("Not able to write output CSV", e);
+        }
     }
 
     public static List<List<String>> readCsv(File file)  {

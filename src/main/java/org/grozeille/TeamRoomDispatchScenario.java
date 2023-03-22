@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.util.List;
+import java.util.LinkedList;
 import java.util.stream.Stream;
 
 @Data
@@ -14,7 +14,7 @@ public class TeamRoomDispatchScenario {
     private int roomSize;
 
     private String roomName;
-    private List<Team> teams;
+    private LinkedList<Team> teams;
 
     private int score;
 
