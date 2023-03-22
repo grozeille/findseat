@@ -395,11 +395,19 @@ public class App
             r.setScore(-penalty);
         }
 
-        // get the combination with the best score
-        TeamRoomDispatchScenario result = results.stream()
+        // how many teams are a split
+        long totalSplitTeam = teamsToAllocate.stream().filter(Team::isSplitTeam).count();
+
+        // get the combination with the best score, that includes a team previously split from previous room
+        Optional<TeamRoomDispatchScenario> optionalResult = results.stream()
+                .filter(r -> r.getTeams().stream().filter(Team::isSplitTeam).count() == totalSplitTeam)
                 .sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore()))
-                .findFirst().get();
-        return result;
+                .findFirst();
+
+        if(optionalResult.isEmpty()) {
+            return null;
+        }
+        return optionalResult.get();
     }
 
     static List<TeamRoomDispatchScenario> findAllDispatchScenarioForRoom(LinkedList<Team> teamsToAllocate, String roomName, int roomSize, LinkedList<Team> teamsAllocated) {

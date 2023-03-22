@@ -128,9 +128,9 @@ public class ConfigUtil {
                 for (List<String> row : rows) {
                     String rowTeamName = row.get(0);
                     String firstname = row.get(1);
-                    String lastname = row.get(1);
-                    String email = row.get(1);
-                    String managerEmail = row.get(1);
+                    String lastname = row.get(2);
+                    String email = row.get(3);
+                    String managerEmail = row.get(4);
                     String statusForTheDay = row.get(statusForDayColumn);
                     boolean mandatory = statusForTheDay.equalsIgnoreCase(DAY_CODE_TEAMDAY);
                     boolean outOffOffice = statusForTheDay.equalsIgnoreCase(DAY_CODE_OFF);
