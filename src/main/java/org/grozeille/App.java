@@ -231,11 +231,16 @@ public class App
 
             System.out.println("Total score: "+scenarioScore);
 
+            // excludes scenarios without all mandatory teams
+            boolean notAbleToDispatchMandatoryTeams = scenario.getNotAbleToDispatch().stream().anyMatch(t -> t.isMandatory());
+
             // keep only the best
-            if(scenarioScore > bestScenarioScore) {
-                bestScenario = scenario;
-                bestScenarioScore = scenarioScore;
-                bestDeskGroupScenario = deskGroupScenario;
+            if(!notAbleToDispatchMandatoryTeams) {
+                if (scenarioScore > bestScenarioScore) {
+                    bestScenario = scenario;
+                    bestScenarioScore = scenarioScore;
+                    bestDeskGroupScenario = deskGroupScenario;
+                }
             }
         }
 
