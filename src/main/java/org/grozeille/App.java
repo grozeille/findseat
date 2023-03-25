@@ -108,10 +108,7 @@ public class App
 
                                 CellStyle cellStyle = cell.getSheet().getWorkbook().createCellStyle();
 
-                                String hexaColor = teamColorMap.get(peopleInTeam.getLeft().getName().substring(0, 4));
-                                if(hexaColor == null) {
-                                    System.out.println("DEBUG");
-                                }
+                                String hexaColor = teamColorMap.get(peopleInTeam.getLeft().getSplitOriginalName());
                                 XSSFColor color = new XSSFColor(hexaToRgb(hexaColor));
 
                                 cellStyle.setFillForegroundColor(color);
@@ -166,7 +163,7 @@ public class App
         List<TeamRoomDispatchScenario> floorScenarios = null;
         if(totalSizeTeams <= totalSizeForAllRooms) {
             floorScenarios = new ArrayList<>();
-            floorScenarios.add(new TeamRoomDispatchScenario(totalSizeForAllRooms, "floor", new LinkedList<>(teams), 0));
+            floorScenarios.add(new TeamRoomDispatchScenario(totalSizeForAllRooms, "floor", 0, new LinkedList<>(teams)));
         }
         else {
             floorScenarios = findAllDispatchScenarioForRoom(teams, "floor", totalSizeForAllRooms, new LinkedList<>());
@@ -354,7 +351,7 @@ public class App
         // special case: fewer people than the room, only 1 scenario
         int totalTeamSize = teamsToAllocate.stream().map(Team::getSize).reduce(0, Integer::sum);
         if(totalTeamSize <= roomSize) {
-            return new TeamRoomDispatchScenario(roomSize, roomName, new LinkedList<>(teamsToAllocate), 0);
+            return new TeamRoomDispatchScenario(roomSize, roomName, 0, new LinkedList<>(teamsToAllocate));
         }
         else {
             // find all possible combination to put teams in that room
@@ -397,7 +394,7 @@ public class App
             int smallestGroup = Math.min(teamSplit.getLeft().getSize(), teamSplit.getRight().getSize());
             int penalty = Math.max(maxPenalty - smallestGroup, 0);
 
-            r.setScore(-penalty);
+            r.setScore(r.getScore()-penalty);
         }
 
         // how many teams are a split
@@ -420,7 +417,7 @@ public class App
         // if we already used all desks of the room, we stop here
         int totalNumberPeopleInTheRoom = teamsAllocated.stream().map(Team::getSize).reduce(0, Integer::sum);
         if (totalNumberPeopleInTheRoom >= roomSize) {
-            return List.of(new TeamRoomDispatchScenario(roomSize, roomName, teamsAllocated, 0));
+            return List.of(new TeamRoomDispatchScenario(roomSize, roomName, 0, teamsAllocated));
         }
 
         List<TeamRoomDispatchScenario> possibleScenarios = new ArrayList<>();
@@ -457,12 +454,20 @@ public class App
         // re-create the team but with only the members who fit
         Team teamA = new Team(team.getName()+"_A", sizeSubGroupA, team.isMandatory(), team.getManagerEmail());
         teamA.setSplitTeam(true);
-        teamA.setSplitOriginalName(team.getName());
+        if(team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
+            teamA.setSplitOriginalName(team.getSplitOriginalName());
+        } else {
+            teamA.setSplitOriginalName(team.getName());
+        }
 
         // create a new "team" which is the second split of the last team, to be assigned to another room
         Team teamB = new Team(team.getName()+"_B", sizeSubGroupB, team.isMandatory(), team.getManagerEmail());
         teamB.setSplitTeam(true);
-        teamB.setSplitOriginalName(team.getName());
+        if(team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
+            teamB.setSplitOriginalName(team.getSplitOriginalName());
+        } else {
+            teamB.setSplitOriginalName(team.getName());
+        }
 
         teamA.setMembers(team.getMembers().subList(0, sizeSubGroupA));
         teamB.setMembers(team.getMembers().subList(sizeSubGroupA, team.getSize()));

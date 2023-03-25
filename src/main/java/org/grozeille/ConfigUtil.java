@@ -90,6 +90,7 @@ public class ConfigUtil {
             if(!rowTeamName.equals(teamName)) {
                 boolean mandatory = row.get(1).equals("1");
                 team = new Team(rowTeamName, 0, mandatory, "");
+                team.setSplitOriginalName(rowTeamName);
                 teams.add(team);
                 teamName = rowTeamName;
             }
@@ -137,6 +138,7 @@ public class ConfigUtil {
                     boolean flex = statusForTheDay.equalsIgnoreCase(DAY_CODE_FLEX);
                     if (!rowTeamName.equals(teamName)) {
                         team = new Team(rowTeamName, 0, mandatory, managerEmail);
+                        team.setSplitOriginalName(rowTeamName);
                         teamsOfTheDay.add(team);
                         teamName = rowTeamName;
                     }
@@ -197,6 +199,7 @@ public class ConfigUtil {
 
             for(Map<String, Team> teams : cachedSampleAllTeamByGroup.values()) {
                 for(Team t : teams.values()) {
+                    t.setSplitOriginalName(t.getName());
                     String managerEmail = (faker.name().firstName()+"."+faker.name().lastName()+"@worldcompany.com").toLowerCase(Locale.ROOT);
                     t.setManagerEmail(managerEmail);
                     for(int cpt = 0; cpt < t.getSize(); cpt++) {

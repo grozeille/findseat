@@ -14,9 +14,10 @@ public class TeamRoomDispatchScenario {
     private int roomSize;
 
     private String roomName;
-    private LinkedList<Team> teams;
 
     private int score;
+
+    private LinkedList<Team> teams;
 
     public Stream<Integer> getSizeList() {
         if(teams == null) return Stream.<Integer>builder().build();
