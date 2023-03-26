@@ -4,7 +4,6 @@ import com.opencsv.CSVWriter;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.DefaultIndexedColorMap;
 import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
@@ -12,6 +11,7 @@ import java.io.*;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -25,6 +25,9 @@ public class App
     public static final String CONSOLE_SEPARATOR = "================";
 
     public static void main(String[] args ) {
+
+        long startupTime = System.currentTimeMillis();
+
         List<Room> rooms = ConfigUtil.parseRoomsFile("test1");
         Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
         final Integer totalSizeForAllRooms = rooms.stream().map(Room::roomSize).reduce(0, Integer::sum);
@@ -33,25 +36,27 @@ public class App
         //List<Team> teams = ConfigUtil.parseTeamsFile("test2");
         Map<Integer, List<Team>> teamsByDay = ConfigUtil.parseTeamForWeekFile("teams2");
         //Map<Integer, List<Team>> teamsByDay = ConfigUtil.getSampleTeamForWeek(totalSizeForAllRooms);
-        //ConfigUtil.saveTeamForWeekFile(teamsByDay);
+        ConfigUtil.saveTeamForWeekFile(teamsByDay);
 
         Map<Integer, Map<String, Pair<Team,People>>> deskPeopleMappingPerDay = new HashMap<>();
 
+        // for each day of the week, find the best dispatch scenario to assign desks to everyone
         for(int day = 1; day <= 5; day++) {
 
             LinkedList<Team> teams = new LinkedList<>(teamsByDay.get(day));
             teamsByDay.put(day, teams);
 
-            Pair<TeamDispatchScenario, Map<String, TeamDispatchScenario>> bestScenarioResult = findBestScenario(day, rooms, teams);
-            TeamDispatchScenario bestScenario = bestScenarioResult.getLeft();
-            Map<String, TeamDispatchScenario> bestDeskGroupScenario = bestScenarioResult.getRight();
+            // find the best dispatch scenario for the floor, with the best dispatch scenario for each desk group
+            Map<String, TeamDispatchScenario> bestDeskGroupScenario = findBestScenarioByRoom(day, rooms, teams);
 
             // Assign a desk to all people
             List<People> peopleWithDesk = new ArrayList<>();
             Map<String, Pair<Team,People>> deskPeopleMapping = new HashMap<>();
-            for(TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
-                Room room = roomsByName.get(r.getRoomName());
-                for(TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
+
+            // for each room, get the dispatch for each desk groups
+            for(Map.Entry<String, TeamDispatchScenario> entry : bestDeskGroupScenario.entrySet()) {
+                Room room = roomsByName.get(entry.getKey());
+                for(TeamRoomDispatchScenario sr : entry.getValue().getDispatched()) {
                     // get all desks of that desk group in that room
                     List<String> desks = room.getDesksGroups().get(sr.getRoomName());
                     Iterator<String> desksIterator = desks.iterator();
@@ -73,6 +78,8 @@ public class App
             exportPeopleWithoutDesk(teams, peopleWithDesk, day);
         }
 
+        Duration totalTime = Duration.ofMillis(System.currentTimeMillis()-startupTime);
+        System.out.println("Dispatch terminated in "+ totalTime.toHours()+":"+totalTime.toMinutes()+":"+totalTime.toSecondsPart()+":"+totalTime.toMillisPart());
 
         try {
             URL resource = App.class.getClassLoader().getResource("floor_mapping.xlsx");
@@ -103,7 +110,7 @@ public class App
                         if (!currentCellValue.isEmpty()) {
                             Pair<Team, People> peopleInTeam = deskPeopleMappingPerDay.get(day).get(currentCellValue);
                             if (peopleInTeam != null) {
-                                String newCellValue = peopleInTeam.getLeft().getName() + " " + peopleInTeam.getRight().getEmail();
+                                String newCellValue = peopleInTeam.getLeft().getSplitOriginalName() + " " + peopleInTeam.getRight().getEmail();
                                 cell.setCellValue(newCellValue);
 
                                 CellStyle cellStyle = cell.getSheet().getWorkbook().createCellStyle();
@@ -133,7 +140,7 @@ public class App
         }
     }
 
-    private static Pair<TeamDispatchScenario, Map<String, TeamDispatchScenario>> findBestScenario(int day, List<Room> rooms, LinkedList<Team> teams) {
+    private static Map<String, TeamDispatchScenario> findBestScenarioByRoom(int day, List<Room> rooms, LinkedList<Team> teams) {
         System.out.println(CONSOLE_SEPARATOR);
         System.out.println("Day: "+day);
 
@@ -207,16 +214,50 @@ public class App
                         entry(e.getKey(), e.getValue())
                 )))).toList();
 
-                // dispatch teams in desk groups for the current room
-                TeamDispatchScenario subEndResult = findBestDispatchScenariosForAllRooms(r.getTeams(), deskGroups);
+                // reset the "split" status of each teams for the desk group dispatch
+                // reason: we must include in the next room the rest of a team split in the previous room
+                // but we are now dispatching in desk groups, so the split status must apply inside the room
+                // also, index by name, to avoid too much objects in memory to generate all permutations
+                Map<String, Team> teamIndex = r.getTeams().stream()
+                        .peek(t -> t.setSplitTeam(false))
+                        .collect(Collectors.toMap(Team::getName, Function.identity()));
+                List<String> teamsName = r.getTeams().stream().map(Team::getName).toList();
+
+                List<List<String>> allTeamPermutations = heapPermutation(teamsName);
+                System.out.println("Found "+allTeamPermutations.size()+" permutations for room "+ room.getName());
+                int cptPermutation = 0;
+                int bestPermutationScenarioScore = Integer.MIN_VALUE;
+                TeamDispatchScenario bestPermutationScenario = null;
+                for(List<String> teamsNameInPermutation : allTeamPermutations) {
+                    if(cptPermutation > 362880) {
+                        System.out.println("Stop here, 362880 permutations is the maximum to reduce the time");
+                        break;
+                    }
+                    LinkedList<Team> teamsInPermutation = new LinkedList<>(teamsNameInPermutation.stream().map(s -> teamIndex.get(s)).toList());
+                    // dispatch teams in desk groups for the current room
+                    TeamDispatchScenario subEndResult = findBestDispatchScenariosForAllRooms(teamsInPermutation, deskGroups);
+                    if(subEndResult.totalScore() > bestPermutationScenarioScore) {
+                        System.out.println("Permutation "+cptPermutation+" score: "+subEndResult.totalScore());
+                        bestPermutationScenario = subEndResult;
+                        bestPermutationScenarioScore = subEndResult.totalScore();
+                    }
+                    cptPermutation++;
+                }
+                // penalty to split inside the room is 2 times less than split across 2 rooms
+                scenarioScore += bestPermutationScenarioScore/2;
+
+                deskGroupScenario.put(r.getRoomName(), bestPermutationScenario);
+            }
+
+            // display the best scenario
+            for(TeamRoomDispatchScenario r : scenario.getDispatched()) {
+                System.out.println("Room(size=" + r.getRoomSize() + ", teams=(" + r.getTeams() + "), score=" + r.getScore() + ")");
+                TeamDispatchScenario subEndResult = deskGroupScenario.get(r.getRoomName());
                 for(TeamRoomDispatchScenario sr : subEndResult.getDispatched()) {
                     System.out.println("\tDesk(size=" + sr.getRoomSize() + ", teams=(" + sr.getTeams() + "), score=" + sr.getScore() + ")");
                 }
-                // penalty to split inside the room is 2 times less than split across 2 rooms
-                scenarioScore += subEndResult.totalScore()/2;
-
-                deskGroupScenario.put(r.getRoomName(), subEndResult);
             }
+
             scenarioScore += scenario.totalScore();
 
             // add teams that don't fit in the floor based on floor scenarios
@@ -252,7 +293,7 @@ public class App
         System.out.println("not able to fit: "+bestScenario.getNotAbleToDispatch());
         System.out.println("Total score: "+bestScenarioScore);
 
-        return ImmutablePair.of(bestScenario, bestDeskGroupScenario);
+        return bestDeskGroupScenario;
     }
 
     private static void exportPeopleWithoutDesk(List<Team> teams, List<People> peopleWithDesk, int day) {
@@ -445,6 +486,43 @@ public class App
         }
 
         return possibleScenarios;
+    }
+
+    static List<List<String>> heapPermutation(List<String> teams) {
+        return heapPermutation(teams.toArray(new String[0]), teams.size());
+    }
+
+    // Generating permutation using Heap Algorithm
+    static List<List<String>> heapPermutation(String[] teams, int size)
+    {
+        List<List<String>> allPermutations = new ArrayList<>();
+
+        // if size becomes 1 then prints the obtained
+        // permutation
+        if (size == 1)
+            return List.of(Arrays.asList(teams));
+
+        for (int i = 0; i < size; i++) {
+            allPermutations.addAll(heapPermutation(Arrays.copyOf(teams, teams.length), size - 1));
+
+            // if size is odd, swap 0th i.e (first) and
+            // (size-1)th i.e (last) element
+            if (size % 2 == 1) {
+                String temp = teams[0];
+                teams[0] = teams[size - 1];
+                teams[size - 1] = temp;
+            }
+
+            // If size is even, swap ith
+            // and (size-1)th i.e last element
+            else {
+                String temp = teams[i];
+                teams[i] = teams[size - 1];
+                teams[size - 1] = temp;
+            }
+        }
+
+        return allPermutations;
     }
 
     static Pair<Team, Team> splitTeam(Team team, int size) {
