@@ -1,4 +1,4 @@
-package org.grozeille;
+package org.grozeille.util;
 
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
@@ -6,9 +6,12 @@ import com.opencsv.exceptions.CsvValidationException;
 import net.datafaker.Faker;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
+import org.grozeille.App;
+import org.grozeille.model.People;
+import org.grozeille.model.Room;
+import org.grozeille.model.Team;
 
 import java.io.*;
-import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;

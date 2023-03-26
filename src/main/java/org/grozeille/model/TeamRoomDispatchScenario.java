@@ -1,8 +1,9 @@
-package org.grozeille;
+package org.grozeille.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.grozeille.model.Team;
 
 import java.util.LinkedList;
 import java.util.stream.Stream;

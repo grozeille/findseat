@@ -6,23 +6,27 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.grozeille.model.*;
+import org.grozeille.util.ConfigUtil;
 
 import java.io.*;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static java.util.Map.entry;
 
-public class App
-{
+public class App {
 
     public static final String CONSOLE_SEPARATOR = "================";
+    public static final String DESTINATION_PATH = "target";
 
     public static void main(String[] args ) {
 
@@ -38,7 +42,7 @@ public class App
         //Map<Integer, List<Team>> teamsByDay = ConfigUtil.getSampleTeamForWeek(totalSizeForAllRooms);
         ConfigUtil.saveTeamForWeekFile(teamsByDay);
 
-        Map<Integer, Map<String, Pair<Team,People>>> deskPeopleMappingPerDay = new HashMap<>();
+        Map<Integer, Map<String, Pair<Team, People>>> deskPeopleMappingPerDay = new HashMap<>();
 
         // for each day of the week, find the best dispatch scenario to assign desks to everyone
         for(int day = 1; day <= 5; day++) {
@@ -61,9 +65,9 @@ public class App
                     List<String> desks = room.getDesksGroups().get(sr.getRoomName());
                     Iterator<String> desksIterator = desks.iterator();
                     // assign a desk for each people in that desk group
-                    for(Team teamsInDeskGroup : sr.getTeams()) {
-                        for(People peopleInDeskGroup : teamsInDeskGroup.getMembers()) {
-                            if(desksIterator.hasNext()) {
+                    for (Team teamsInDeskGroup : sr.getTeams()) {
+                        for (People peopleInDeskGroup : teamsInDeskGroup.getMembers()) {
+                            if (desksIterator.hasNext()) {
                                 deskPeopleMapping.put(desksIterator.next(), ImmutablePair.of(teamsInDeskGroup, peopleInDeskGroup));
                                 peopleWithDesk.add(peopleInDeskGroup);
                             }
@@ -74,7 +78,7 @@ public class App
 
             deskPeopleMappingPerDay.put(day, deskPeopleMapping);
 
-            exportAllPeople(teams, day);
+            exportAllPeople(teams, day, Paths.get(DESTINATION_PATH));
             exportPeopleWithoutDesk(teams, peopleWithDesk, day);
         }
 
@@ -86,12 +90,9 @@ public class App
             FileInputStream file = new FileInputStream(new File(resource.toURI()));
             Workbook workbook = new XSSFWorkbook(file);
 
-            for(int day = 1; day <= 5; day++) {
+            for (int day = 1; day <= 5; day++) {
                 // create a mapping of team/color
-                String[] colors = new String[]{
-                        "#838CA9", "#A4D78D", "#FFE485", "#FFC598", "#E58787",
-                        "#98EBEC", "#70A3CA", "#6994AE", "#FACF7F", "#F7A072",
-                        "#FF0F80", "#2B50AA", "#FF9FE5", "#FFD4D4", "#FF858D"};
+                String[] colors = new String[]{"#838CA9", "#A4D78D", "#FFE485", "#FFC598", "#E58787", "#98EBEC", "#70A3CA", "#6994AE", "#FACF7F", "#F7A072", "#FF0F80", "#2B50AA", "#FF9FE5", "#FFD4D4", "#FF858D"};
 
                 Map<String, String> teamColorMap = new HashMap<>();
                 List<Team> allDispatchedTeams = teamsByDay.get(day);
@@ -101,9 +102,9 @@ public class App
 
                 // clone the floor plan for a specific day to replace desk names by the assigned people
                 workbook.cloneSheet(0);
-                workbook.setSheetName(workbook.getNumberOfSheets()-1, DayOfWeek.of(day).name());
+                workbook.setSheetName(workbook.getNumberOfSheets() - 1, DayOfWeek.of(day).name());
 
-                Sheet sheet = workbook.getSheetAt(workbook.getNumberOfSheets()-1);
+                Sheet sheet = workbook.getSheetAt(workbook.getNumberOfSheets() - 1);
                 for (Row row : sheet) {
                     for (Cell cell : row) {
                         String currentCellValue = cell.getStringCellValue();
@@ -130,7 +131,7 @@ public class App
             }
 
             File floorPlanOutputExcelFile = new File("target/output.xlsx");
-            if(floorPlanOutputExcelFile.exists()) {
+            if (floorPlanOutputExcelFile.exists()) {
                 floorPlanOutputExcelFile.delete();
             }
             workbook.write(new FileOutputStream(floorPlanOutputExcelFile));
@@ -142,7 +143,7 @@ public class App
 
     private static Map<String, TeamDispatchScenario> findBestScenarioByRoom(int day, List<Room> rooms, LinkedList<Team> teams) {
         System.out.println(CONSOLE_SEPARATOR);
-        System.out.println("Day: "+day);
+        System.out.println("Day: " + day);
 
         final Integer totalSizeForAllRooms = rooms.stream().map(Room::roomSize).reduce(0, Integer::sum);
         Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
@@ -150,15 +151,15 @@ public class App
         final Integer totalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
 
         System.out.println(CONSOLE_SEPARATOR);
-        for(Room r : rooms) {
-            System.out.println("Room size="+r.roomSize()+", deskGroups=["+String.join(",", Arrays.stream(r.roomGroupSizes()).map(Object::toString).toList()) +"]");
+        for (Room r : rooms) {
+            System.out.println("Room size=" + r.roomSize() + ", deskGroups=[" + String.join(",", Arrays.stream(r.roomGroupSizes()).map(Object::toString).toList()) + "]");
         }
-        System.out.println("Team floor size="+totalSizeForAllRooms);
+        System.out.println("Team floor size=" + totalSizeForAllRooms);
         System.out.println(CONSOLE_SEPARATOR);
-        for(Team t : teams) {
+        for (Team t : teams) {
             System.out.println("Team name=" + t.getName() + ", size=" + t.getSize() + ", mandatory=" + t.isMandatory());
         }
-        System.out.println("Team total size="+totalSizeTeams);
+        System.out.println("Team total size=" + totalSizeTeams);
         System.out.println(CONSOLE_SEPARATOR);
 
 
@@ -168,11 +169,10 @@ public class App
         // first, try to identify all scenarios to fit all people on the floor with all teams as mandatory
         // consider the floor as a single room
         List<TeamRoomDispatchScenario> floorScenarios = null;
-        if(totalSizeTeams <= totalSizeForAllRooms) {
+        if (totalSizeTeams <= totalSizeForAllRooms) {
             floorScenarios = new ArrayList<>();
             floorScenarios.add(new TeamRoomDispatchScenario(totalSizeForAllRooms, "floor", 0, new LinkedList<>(teams)));
-        }
-        else {
+        } else {
             floorScenarios = findAllDispatchScenarioForRoom(teams, "floor", totalSizeForAllRooms, new LinkedList<>());
         }
 
@@ -193,26 +193,24 @@ public class App
 
         int scenarioCpt = 0;
         // for each scenario, try to dispatch teams in the rooms
-        for(TeamRoomDispatchScenario floorDispatchScenario : floorScenarios) {
+        for (TeamRoomDispatchScenario floorDispatchScenario : floorScenarios) {
 
             scenarioCpt++;
             System.out.println(CONSOLE_SEPARATOR);
-            System.out.println("Scenario: "+scenarioCpt + ", total to fit=" + floorDispatchScenario.getTotalSize()+" in floor size="+floorDispatchScenario.getRoomSize());
+            System.out.println("Scenario: " + scenarioCpt + ", total to fit=" + floorDispatchScenario.getTotalSize() + " in floor size=" + floorDispatchScenario.getRoomSize());
 
             int scenarioScore = 0;
             Map<String, TeamDispatchScenario> deskGroupScenario = new HashMap<>();
 
             // try to dispatch teams in the room and desk groups
             TeamDispatchScenario scenario = findBestDispatchScenariosForAllRooms(floorDispatchScenario.getTeams(), rooms);
-            for(TeamRoomDispatchScenario r : scenario.getDispatched()) {
-                System.out.println("Room(size=" + r.getRoomSize() + ", teams=("+r.getTeams()+"), score="+r.getScore()+")");
+            for (TeamRoomDispatchScenario r : scenario.getDispatched()) {
+                System.out.println("Room(size=" + r.getRoomSize() + ", teams=(" + r.getTeams() + "), score=" + r.getScore() + ")");
 
                 // get the desk groups of the current room
                 Room room = roomsByName.get(r.getRoomName());
                 // create "virtual rooms" for each desk group
-                List<Room> deskGroups = room.getDesksGroups().entrySet().stream().map(e -> new Room(e.getKey(), new LinkedHashMap<>(Map.ofEntries(
-                        entry(e.getKey(), e.getValue())
-                )))).toList();
+                List<Room> deskGroups = room.getDesksGroups().entrySet().stream().map(e -> new Room(e.getKey(), new LinkedHashMap<>(Map.ofEntries(entry(e.getKey(), e.getValue()))))).toList();
 
                 // reset the "split" status of each teams for the desk group dispatch
                 // reason: we must include in the next room the rest of a team split in the previous room
@@ -265,15 +263,15 @@ public class App
             notIncludedInTheFloorScenario.removeAll(floorDispatchScenario.getTeams());
             scenario.getNotAbleToDispatch().addAll(notIncludedInTheFloorScenario);
 
-            System.out.println("not able to fit: "+scenario.getNotAbleToDispatch());
+            System.out.println("not able to fit: " + scenario.getNotAbleToDispatch());
 
-            System.out.println("Total score: "+scenarioScore);
+            System.out.println("Total score: " + scenarioScore);
 
             // excludes scenarios without all mandatory teams
             boolean notAbleToDispatchMandatoryTeams = scenario.getNotAbleToDispatch().stream().anyMatch(t -> t.isMandatory());
 
             // keep only the best
-            if(!notAbleToDispatchMandatoryTeams) {
+            if (!notAbleToDispatchMandatoryTeams) {
                 if (scenarioScore > bestScenarioScore) {
                     bestScenario = scenario;
                     bestScenarioScore = scenarioScore;
@@ -284,14 +282,14 @@ public class App
 
         System.out.println(CONSOLE_SEPARATOR);
         System.out.println("Best scenario");
-        for(TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
+        for (TeamRoomDispatchScenario r : bestScenario.getDispatched()) {
             System.out.println("Room(size=" + r.getRoomSize() + ", teams=(" + r.getTeams() + "), score=" + r.getScore() + ")");
-            for(TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
+            for (TeamRoomDispatchScenario sr : bestDeskGroupScenario.get(r.getRoomName()).getDispatched()) {
                 System.out.println("\tDesk(size=" + sr.getRoomSize() + ", teams=(" + sr.getTeams() + "), score=" + sr.getScore() + ")");
             }
         }
-        System.out.println("not able to fit: "+bestScenario.getNotAbleToDispatch());
-        System.out.println("Total score: "+bestScenarioScore);
+        System.out.println("not able to fit: " + bestScenario.getNotAbleToDispatch());
+        System.out.println("Total score: " + bestScenarioScore);
 
         return bestDeskGroupScenario;
     }
@@ -299,38 +297,49 @@ public class App
     private static void exportPeopleWithoutDesk(List<Team> teams, List<People> peopleWithDesk, int day) {
         List<String[]> output = new ArrayList<>();
 
-        List<People> allPeople = teams.stream().flatMap((Function<Team, Stream<People>>) team -> team.getMembers().stream()).toList();
+        List<People> allPeople = teams.stream()
+                .flatMap(team -> team.getMembers().stream())
+                .toList();
+
         allPeople = new ArrayList<>(allPeople);
         allPeople.removeAll(peopleWithDesk);
-        for(People p : allPeople) {
+        for (People p : allPeople) {
             String outputCell = p.getEmail();
             output.add(new String[]{outputCell});
-            System.out.println("People without desk: "+p);
+            System.out.println("People without desk: " + p);
         }
-        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/people_without_desk_"+DayOfWeek.of(day).name()+".csv"))) {
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/people_without_desk_" + DayOfWeek.of(day).name() + ".csv"))) {
             csvWriter.writeAll(output);
         } catch (IOException e) {
             throw new RuntimeException("Not able to write output CSV", e);
         }
     }
 
-    private static void exportAllPeople(List<Team> teams, int day) {
+
+    public static void exportAllPeople(List<Team> teams, int day, Path path){
+        try {
+            Files.createDirectories(path);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
         List<String[]> output = new ArrayList<>();
-        for(Team t : teams) {
-            for(People p : t.getMembers()) {
-                String outputCell = t.getName() + " " + p.getEmail();
-                output.add(new String[]{outputCell});
+        //header
+        output.add(new String[]{"name", "email"});
+        for (Team t : teams) {
+            for (People p : t.getMembers()) {
+                output.add(new String[]{t.getName(), p.getEmail()});
             }
         }
-        try (CSVWriter csvWriter = new CSVWriter(new FileWriter("target/all_people_"+DayOfWeek.of(day).name()+".csv"))) {
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter(path + File.separator + "all_people_" + DayOfWeek.of(day).name() + ".csv"))) {
             csvWriter.writeAll(output);
         } catch (IOException e) {
             throw new RuntimeException("Not able to write output CSV", e);
         }
     }
 
-    static  byte[] hexaToRgb(String hexaColor) {
-        if(hexaColor.startsWith("#")) {
+    static byte[] hexaToRgb(String hexaColor) {
+        if (hexaColor.startsWith("#")) {
             hexaColor = hexaColor.substring(1);
         }
         int resultRed = Integer.valueOf(hexaColor.substring(0, 2), 16);
@@ -350,16 +359,16 @@ public class App
         //rooms = rooms.stream().sorted(Comparator.comparingInt(Room::roomSize)).toList();
         // TODO: don't do it for desk groups to keep the right order
 
-        for(Room room : rooms) {
+        for (Room room : rooms) {
 
             TeamRoomDispatchScenario result = findBestDispatchScenarioForRoom(teamsToDispatch, room.getName(), room.roomSize());
-            if(result == null) {
+            if (result == null) {
                 break;
             }
             Integer sum = result.getTotalSize();
 
             // if not all teams fit in this room, split the last team
-            if(sum > room.roomSize()) {
+            if (sum > room.roomSize()) {
                 Team lastTeam = result.getTeams().get(result.getTeams().size() - 1);
                 int spaceLeftWithoutLastTeam = room.roomSize() - (result.getTotalSize() - lastTeam.getSize());
 
@@ -391,39 +400,36 @@ public class App
 
         // special case: fewer people than the room, only 1 scenario
         int totalTeamSize = teamsToAllocate.stream().map(Team::getSize).reduce(0, Integer::sum);
-        if(totalTeamSize <= roomSize) {
+        if (totalTeamSize <= roomSize) {
             return new TeamRoomDispatchScenario(roomSize, roomName, 0, new LinkedList<>(teamsToAllocate));
-        }
-        else {
+        } else {
             // find all possible combination to put teams in that room
             results = findAllDispatchScenarioForRoom(teamsToAllocate, roomName, roomSize, new LinkedList<>());
         }
 
         // some combination can exceed the room size
         // sorted by size (smaller to bigger)
-        results = results.stream()
-                .sorted((o1, o2) -> {
-                    int result = Integer.compare(o1.getTotalSize(), o2.getTotalSize());
-                    if (result == 0) {
-                        return Integer.compare(o1.getTeams().size(), o2.getTeams().size());
-                    } else {
-                        return result;
-                    }
-                })
-                .toList();
+        results = results.stream().sorted((o1, o2) -> {
+            int result = Integer.compare(o1.getTotalSize(), o2.getTotalSize());
+            if (result == 0) {
+                return Integer.compare(o1.getTeams().size(), o2.getTeams().size());
+            } else {
+                return result;
+            }
+        }).toList();
 
         // if the first one (smallest) fit exactly the room size, return it
         Optional<TeamRoomDispatchScenario> optionalFirst = results.stream().findFirst();
-        if(optionalFirst.isEmpty()) {
+        if (optionalFirst.isEmpty()) {
             return null;
         }
         TeamRoomDispatchScenario first = optionalFirst.get();
-        if(first.getTotalSize() == roomSize) {
+        if (first.getTotalSize() == roomSize) {
             return first;
         }
 
         // else, split the last team in 2 (current room and next one) and find the best split scenario based on penalty
-        for(TeamRoomDispatchScenario r : results) {
+        for (TeamRoomDispatchScenario r : results) {
             // split the last Team and compute the penalty of it
             // having 1 person alone is the worst scenario
             // but having a team of 20 split in half is OK
@@ -435,19 +441,16 @@ public class App
             int smallestGroup = Math.min(teamSplit.getLeft().getSize(), teamSplit.getRight().getSize());
             int penalty = Math.max(maxPenalty - smallestGroup, 0);
 
-            r.setScore(r.getScore()-penalty);
+            r.setScore(r.getScore() - penalty);
         }
 
         // how many teams are a split
         long totalSplitTeam = teamsToAllocate.stream().filter(Team::isSplitTeam).count();
 
         // get the combination with the best score, that includes a team previously split from previous room
-        Optional<TeamRoomDispatchScenario> optionalResult = results.stream()
-                .filter(r -> r.getTeams().stream().filter(Team::isSplitTeam).count() == totalSplitTeam)
-                .sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore()))
-                .findFirst();
+        Optional<TeamRoomDispatchScenario> optionalResult = results.stream().filter(r -> r.getTeams().stream().filter(Team::isSplitTeam).count() == totalSplitTeam).sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore())).findFirst();
 
-        if(optionalResult.isEmpty()) {
+        if (optionalResult.isEmpty()) {
             return null;
         }
         return optionalResult.get();
@@ -464,7 +467,7 @@ public class App
         List<TeamRoomDispatchScenario> possibleScenarios = new ArrayList<>();
 
         // for each teams to allocate, add the team in the room and add the next ones of the list to be allocated
-        for(int i=0;i<teamsToAllocate.size();i++) {
+        for (int i = 0; i < teamsToAllocate.size(); i++) {
             // new list of teams for the room
             LinkedList<Team> newTeamsAllocated = new LinkedList<>(teamsAllocated);
             Team n = teamsToAllocate.get(i);
@@ -472,15 +475,14 @@ public class App
 
             // new list of teams to be remaining
             LinkedList<Team> remaining = new LinkedList<>();
-            for (int j=i+1; j<teamsToAllocate.size();j++) remaining.add(teamsToAllocate.get(j));
+            for (int j = i + 1; j < teamsToAllocate.size(); j++) remaining.add(teamsToAllocate.get(j));
 
             // get all scenarios based on that
             List<TeamRoomDispatchScenario> result = findAllDispatchScenarioForRoom(remaining, roomName, roomSize, newTeamsAllocated);
             for (TeamRoomDispatchScenario r : result) {
                 totalNumberPeopleInTheRoom = r.getTotalSize();
                 // if the room is filled, add the scenario to the result
-                if (totalNumberPeopleInTheRoom >= roomSize)
-                    possibleScenarios.add(r);
+                if (totalNumberPeopleInTheRoom >= roomSize) possibleScenarios.add(r);
             }
 
         }
@@ -530,18 +532,18 @@ public class App
         int sizeSubGroupB = team.getSize() - sizeSubGroupA;
 
         // re-create the team but with only the members who fit
-        Team teamA = new Team(team.getName()+"_A", sizeSubGroupA, team.isMandatory(), team.getManagerEmail());
+        Team teamA = new Team(team.getName() + "_A", sizeSubGroupA, team.isMandatory(), team.getManagerEmail());
         teamA.setSplitTeam(true);
-        if(team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
+        if (team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
             teamA.setSplitOriginalName(team.getSplitOriginalName());
         } else {
             teamA.setSplitOriginalName(team.getName());
         }
 
         // create a new "team" which is the second split of the last team, to be assigned to another room
-        Team teamB = new Team(team.getName()+"_B", sizeSubGroupB, team.isMandatory(), team.getManagerEmail());
+        Team teamB = new Team(team.getName() + "_B", sizeSubGroupB, team.isMandatory(), team.getManagerEmail());
         teamB.setSplitTeam(true);
-        if(team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
+        if (team.getSplitOriginalName() != null && team.getSplitOriginalName().length() > 0) {
             teamB.setSplitOriginalName(team.getSplitOriginalName());
         } else {
             teamB.setSplitOriginalName(team.getName());

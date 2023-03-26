@@ -1,4 +1,4 @@
-package org.grozeille;
+package org.grozeille.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

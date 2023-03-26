@@ -1,4 +1,4 @@
-package org.grozeille;
+package org.grozeille.model;
 
 import lombok.*;
 
@@ -22,6 +22,10 @@ public class Team implements Cloneable {
     private boolean splitTeam;
     private String splitOriginalName;
 
+    public Team(String name) {
+        this.name = name;
+    }
+
     public Object clone() {
         Team newClone = new Team();
         newClone.setName(this.name);
@@ -32,5 +36,9 @@ public class Team implements Cloneable {
         newClone.setManagerEmail(this.managerEmail);
         newClone.setMembers(new ArrayList<>(this.members));
         return newClone;
+    }
+
+    public void addMember(People people) {
+        members.add(people);
     }
 }
