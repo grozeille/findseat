@@ -18,10 +18,10 @@ import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.atomic.LongAccumulator;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Map.entry;
 
@@ -188,7 +188,7 @@ public class App {
         }).filter(s -> s.getTotalSize() >= Math.min(totalSizeTeams, totalSizeForAllRooms)).toList();
 
         System.out.println("Found " + floorScenarios.size() + " scenarios to fit dispatch teams on the floor, including all mandatory teams");
-        int scenarioCpt = 0;
+
         Map<String, List<TeamRoomDispatchScenario>> scenariosByOptionalTeamsSizeCombination = new HashMap<>();
         for(TeamRoomDispatchScenario floorDispatchScenario : floorScenarios) {
 
@@ -209,6 +209,8 @@ public class App {
             }
             scenarioList.add(floorDispatchScenario);
         }
+
+        int scenarioCpt = 0;
         Random random = new Random();
         List<TeamRoomDispatchScenario> simplifiedFloorScenarios = new ArrayList<>();
         for(Map.Entry<String, List<TeamRoomDispatchScenario>> e : scenariosByOptionalTeamsSizeCombination.entrySet()) {
@@ -229,6 +231,7 @@ public class App {
             }
         }
 
+        System.out.println("Found " + simplifiedFloorScenarios.size() + " scenarios to fit dispatch teams on the floor, when reducing all equivalent scenarios");
 
         int bestScenarioScore = Integer.MIN_VALUE;
         TeamDispatchScenario bestScenario = null;
