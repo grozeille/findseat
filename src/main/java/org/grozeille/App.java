@@ -49,6 +49,8 @@ public class App {
         // for each day of the week, find the best dispatch scenario to assign desks to everyone
         for(int day = 1; day <= 5; day++) {
 
+            //if(day > 1) break;
+
             LinkedList<Team> teams = new LinkedList<>(teamsByDay.get(day));
             teamsByDay.put(day, teams);
 
@@ -267,17 +269,47 @@ public class App {
                         .collect(Collectors.toMap(Team::getName, Function.identity()));
                 List<String> teamsName = r.getTeams().stream().map(Team::getName).toList();
 
-                //List<List<String>> allTeamPermutations = heapPermutation(teamsName);
-                List<List<String>> allTeamPermutations = List.of(teamsName);
-                System.out.println("Found "+allTeamPermutations.size()+" permutations for room "+ room.getName());
+
+                // find all combination of sizes
+                /*Map<Integer, List<Team>> teamBySizes = r.getTeams().stream()
+                        .peek(t -> t.setSplitTeam(false))
+                        .collect(Collectors.groupingBy(Team::getSize));
+                List<Integer> teamSizes = r.getTeams().stream().map(Team::getSize).toList();
+
+
+                List<List<Integer>> allTeamPermutations = heapPermutation(teamSizes);
+                allTeamPermutations = allTeamPermutations.stream().distinct().toList();
+
+                // map sizes to team names
+                List<List<String>> allNewTeamPermutations = new ArrayList<>();
+                for(List<Integer> p : allTeamPermutations) {
+                    // create a new list of teams, by name
+                    List<String> teamNamesOfPermutation = new ArrayList<>();
+                    allNewTeamPermutations.add(teamNamesOfPermutation);
+                    // search the team name by the size
+                    Map<Integer, Integer> teamSizeIndex = new HashMap<>();
+                    Integer sizeIndex = 0;
+                    for(Integer s : p) {
+                        // get the team index from the list (because we can have multiple teams with the same size)
+                        if(teamSizeIndex.containsKey(s)) {
+                            sizeIndex = teamSizeIndex.get(s);
+                        } else {
+                            sizeIndex = 0;
+                        }
+                        teamSizeIndex.put(s, sizeIndex+1);
+                        teamNamesOfPermutation.add(teamBySizes.get(s).get(sizeIndex).getName());
+                    }
+                }*/
+
+
+                List<List<String>> allNewTeamPermutations = List.of(teamsName);
+                //allTeamPermutations = List.of(teamsName);
+
+                System.out.println("Found "+allNewTeamPermutations.size()+" permutations for room "+ room.getName());
                 int cptPermutation = 0;
                 int bestPermutationScenarioScore = Integer.MIN_VALUE;
                 TeamDispatchScenario bestPermutationScenario = null;
-                for(List<String> teamsNameInPermutation : allTeamPermutations) {
-                    if(cptPermutation > 362880) {
-                        System.out.println("Stop here, 362880 permutations is the maximum to reduce the time");
-                        break;
-                    }
+                for(List<String> teamsNameInPermutation : allNewTeamPermutations) {
                     LinkedList<Team> teamsInPermutation = new LinkedList<>(teamsNameInPermutation.stream().map(s -> teamIndex.get(s)).toList());
                     // dispatch teams in desk groups for the current room
                     TeamDispatchScenario subEndResult = findBestDispatchScenariosForAllRooms(teamsInPermutation, deskGroups);
@@ -496,15 +528,20 @@ public class App {
         // how many teams are a split
         long totalSplitTeam = teamsToAllocate.stream().filter(Team::isSplitTeam).count();
 
-        String[] teamsName = results.stream()
-                .flatMap((Function<TeamRoomDispatchScenario, Stream<Team>>) t -> t.getTeams().stream())
-                .map(Team::getName)
-                .toArray(String[]::new);
-
-        System.out.println("["+String.join(",", teamsName)+"]");
+        /*System.out.println("------------");
+        for(TeamRoomDispatchScenario s : results) {
+            String[] teamsName = s.getTeams().stream()
+                    .map(t->t.getName()+"("+t.getSize()+")")
+                    .toArray(String[]::new);
+            System.out.println("["+String.join(",", teamsName)+"]");
+        }*/
 
         // get the combination with the best score, that includes a team previously split from previous room
-        Optional<TeamRoomDispatchScenario> optionalResult = results.stream().filter(r -> r.getTeams().stream().filter(Team::isSplitTeam).count() == totalSplitTeam).sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore())).findFirst();
+        Optional<TeamRoomDispatchScenario> optionalResult = results.stream()
+                .filter(r -> r.getTeams().stream()
+                .filter(Team::isSplitTeam).count() == totalSplitTeam)
+                .sorted((o1, o2) -> Comparator.<Integer>reverseOrder().compare(o1.getScore(), o2.getScore()))
+                .findFirst();
 
         if (optionalResult.isEmpty()) {
             return null;
@@ -546,14 +583,14 @@ public class App {
         return possibleScenarios;
     }
 
-    static List<List<String>> heapPermutation(List<String> teams) {
-        return heapPermutation(teams.toArray(new String[0]), teams.size());
+    static List<List<Integer>> heapPermutation(List<Integer> teams) {
+        return heapPermutation(teams.toArray(new Integer[0]), teams.size());
     }
 
     // Generating permutation using Heap Algorithm
-    static List<List<String>> heapPermutation(String[] teams, int size)
+    static List<List<Integer>> heapPermutation(Integer[] teams, int size)
     {
-        List<List<String>> allPermutations = new ArrayList<>();
+        List<List<Integer>> allPermutations = new ArrayList<>();
 
         // if size becomes 1 then prints the obtained
         // permutation
@@ -563,10 +600,15 @@ public class App {
         for (int i = 0; i < size; i++) {
             allPermutations.addAll(heapPermutation(Arrays.copyOf(teams, teams.length), size - 1));
 
+            if(allPermutations.size() >= 362880) {
+                System.out.println("Too many permutations");
+                break;
+            }
+
             // if size is odd, swap 0th i.e (first) and
             // (size-1)th i.e (last) element
             if (size % 2 == 1) {
-                String temp = teams[0];
+                Integer temp = teams[0];
                 teams[0] = teams[size - 1];
                 teams[size - 1] = temp;
             }
@@ -574,7 +616,7 @@ public class App {
             // If size is even, swap ith
             // and (size-1)th i.e last element
             else {
-                String temp = teams[i];
+                Integer temp = teams[i];
                 teams[i] = teams[size - 1];
                 teams[size - 1] = temp;
             }
