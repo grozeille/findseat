@@ -11,10 +11,7 @@ import java.util.List;
 public class Team implements Cloneable {
     @NonNull
     private String name;
-    @NonNull
-    private Integer size; // TODO temporary because it's easier to test by forcing the size, but should be calculated based on the members
-    @NonNull // Used only for Lombok
-    private boolean mandatory;
+
     private List<People> members = new ArrayList<>();
     @NonNull
     private String managerEmail;
@@ -30,12 +27,18 @@ public class Team implements Cloneable {
         Team newClone = new Team();
         newClone.setName(this.name);
         newClone.setSplitTeam(this.splitTeam);
-        newClone.setSize(this.size);
-        newClone.setMandatory(this.mandatory);
         newClone.setSplitOriginalName(this.splitOriginalName);
         newClone.setManagerEmail(this.managerEmail);
-        newClone.setMembers(new ArrayList<>(this.members));
+        newClone.setMembers(new ArrayList<>(this.members.stream().map(p -> (People)p.clone()).toList()));
         return newClone;
+    }
+
+    public int size() {
+        if(this.getMembers() != null) {
+            return this.getMembers().size();
+        }
+
+        return 0;
     }
 
     public void addMember(People people) {

@@ -20,12 +20,10 @@ public class TeamRoomDispatchScenario {
 
     private LinkedList<Team> teams;
 
-    public Stream<Integer> getSizeList() {
-        if(teams == null) return Stream.<Integer>builder().build();
-        return teams.stream().map(Team::getSize);
-    }
-
     public Integer getTotalSize() {
-        return this.getSizeList().reduce(0, Integer::sum);
+        if(teams == null) {
+            return 0;
+        }
+        return teams.stream().mapToInt(Team::size).sum();
     }
 }

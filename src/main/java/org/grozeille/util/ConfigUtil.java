@@ -8,6 +8,7 @@ import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
 import org.grozeille.App;
 import org.grozeille.model.People;
+import org.grozeille.model.ReservationType;
 import org.grozeille.model.Room;
 import org.grozeille.model.Team;
 
@@ -22,8 +23,11 @@ import java.util.stream.Stream;
 public class ConfigUtil {
 
     public static final String DAY_CODE_TEAMDAY = "T";
+
     public static final String DAY_CODE_OFF = "";
     public static final String DAY_CODE_FLEX = "F";
+
+    public static final String DAY_CODE_ADDITIONAL = "A";
 
     /**
      * parse CSV format:
@@ -32,7 +36,7 @@ public class ConfigUtil {
      * roomA, deskGroupA, DeskAA002
      * roomA, deskGroupB, DeskAB001
      * roomB, deskGroupA, DeskBA001
-     * @return
+     * @return list of rooms based on a rooms.csv file in the provided folder
      */
     public static List<Room> parseRoomsFile(String folder) {
         List<Room> rooms = new ArrayList<>();
@@ -70,41 +74,6 @@ public class ConfigUtil {
         return rooms;
     }
 
-    /**
-     * parse CSV format:
-     * team name, mandatory, team member name
-     * teamA, 1, John Doe
-     * teamB, 0, Sydney Buffy
-     * @return
-     */
-    public static List<Team> parseTeamsFile(String folder) {
-        List<Team> teams = new ArrayList<>();
-        String fileName = folder+"/teams.csv";
-        List<List<String>> rows = readCsv(fileName);
-
-        // consider first line as header
-        rows.remove(0);
-
-        String teamName = "";
-        Team team = new Team();
-
-        for(List<String> row : rows) {
-            String rowTeamName = row.get(0);
-            if(!rowTeamName.equals(teamName)) {
-                boolean mandatory = row.get(1).equals("1");
-                team = new Team(rowTeamName, 0, mandatory, "");
-                team.setSplitOriginalName(rowTeamName);
-                teams.add(team);
-                teamName = rowTeamName;
-            }
-            String teamMemberName = row.get(2);
-            // for now, ignore the name, just count the total number of members
-            team.setSize(team.getSize()+1);
-        }
-
-        return teams;
-    }
-
     public static Map<Integer, List<Team>> parseTeamForWeekFile(String folder) {
         URL url = App.class.getClassLoader().getResource(folder);
         String path = url.getPath();
@@ -136,22 +105,22 @@ public class ConfigUtil {
                     String email = row.get(3);
                     String managerEmail = row.get(4);
                     String statusForTheDay = row.get(statusForDayColumn);
-                    boolean mandatory = statusForTheDay.equalsIgnoreCase(DAY_CODE_TEAMDAY);
-                    boolean outOffOffice = statusForTheDay.equalsIgnoreCase(DAY_CODE_OFF);
-                    boolean flex = statusForTheDay.equalsIgnoreCase(DAY_CODE_FLEX);
+                    ReservationType reservationType = null;
+                    if(statusForTheDay.equalsIgnoreCase(DAY_CODE_TEAMDAY)) {
+                        reservationType = ReservationType.MANDATORY;
+                    } else if(statusForTheDay.equalsIgnoreCase(DAY_CODE_FLEX)) {
+                        reservationType = ReservationType.NORMAL;
+                    } else if(statusForTheDay.equalsIgnoreCase(DAY_CODE_ADDITIONAL)) {
+                        reservationType = ReservationType.OPTIONAL;
+                    }
                     if (!rowTeamName.equals(teamName)) {
-                        team = new Team(rowTeamName, 0, mandatory, managerEmail);
+                        team = new Team(rowTeamName, managerEmail);
                         team.setSplitOriginalName(rowTeamName);
                         teamsOfTheDay.add(team);
                         teamName = rowTeamName;
                     }
-                    // if any member of the team has his team day that day, that means it's the team day of the team
-                    // (we can have "empty" for a member for the team day if that person is out of office)
-                    team.setMandatory(team.isMandatory() || mandatory);
-
-                    if(mandatory || flex) {
-                        team.getMembers().add(new People(firstname, lastname, email));
-                        team.setSize(team.getSize() + 1);
+                    if(reservationType != null) {
+                        team.getMembers().add(new People(firstname, lastname, email, reservationType));
                     }
                 }
             }
@@ -159,7 +128,7 @@ public class ConfigUtil {
 
         // remove teams without any members for a specific day
         for(Map.Entry<Integer, List<Team>> entry : teamsByDay.entrySet()) {
-            entry.setValue(entry.getValue().stream().filter(t -> t.getSize() > 0).toList());
+            entry.setValue(entry.getValue().stream().filter(t -> t.size() > 0).toList());
         }
 
         return teamsByDay;
@@ -167,37 +136,38 @@ public class ConfigUtil {
 
     private static Map<String, Map<String, Team>> cachedSampleAllTeamByGroup;
 
-    public static Map<String, Map<String, Team>> getSampleAllTeamByGroup() {
+    private static Map<String, Map<String, Team>> getSampleAllTeamByGroup() {
         Faker faker = new Faker();
 
         if(cachedSampleAllTeamByGroup == null) {
+            Map<String, Integer> teamSizes = new HashMap<>();
             cachedSampleAllTeamByGroup = new HashMap<>();
             Map<String,Team> group1 = new HashMap<>();
-            group1.put("G1T1", new Team("G1T1", 6, true, ""));
-            group1.put("G1T2", new Team("G1T2", 20, true, ""));
+            createNewTeamInGroupWithSize(teamSizes, group1, "G1T1", 6);
+            createNewTeamInGroupWithSize(teamSizes, group1, "G1T2", 20);
             cachedSampleAllTeamByGroup.put("G1", group1);
 
             Map<String,Team> group2 = new HashMap<>();
-            group2.put("G2T1", new Team("G2T1", 17, true, ""));
-            group2.put("G2T2", new Team("G2T2", 20, true, ""));
+            createNewTeamInGroupWithSize(teamSizes, group2, "G2T1", 17);
+            createNewTeamInGroupWithSize(teamSizes, group2, "G2T2", 20);
             cachedSampleAllTeamByGroup.put("G2", group2);
 
             Map<String,Team> group3 = new HashMap<>();
-            group3.put("G3T1", new Team("G3T1", 3, true, ""));
-            group3.put("G3T2", new Team("G3T2", 12, true, ""));
-            group3.put("G3T3", new Team("G3T3", 8, true, ""));
+            createNewTeamInGroupWithSize(teamSizes, group3, "G3T1", 3);
+            createNewTeamInGroupWithSize(teamSizes, group3, "G3T2", 12);
+            createNewTeamInGroupWithSize(teamSizes, group3, "G3T3", 8);
             cachedSampleAllTeamByGroup.put("G3", group3);
 
             Map<String,Team> group4 = new HashMap<>();
-            group4.put("G4T1", new Team("G4T1", 5, true, ""));
-            group4.put("G4T2", new Team("G4T2", 15, true, ""));
-            group4.put("G4T3", new Team("G4T3", 6, true, ""));
+            createNewTeamInGroupWithSize(teamSizes, group4, "G4T1", 5);
+            createNewTeamInGroupWithSize(teamSizes, group4, "G4T2", 15);
+            createNewTeamInGroupWithSize(teamSizes, group4, "G4T3", 6);
             cachedSampleAllTeamByGroup.put("G4", group4);
 
             Map<String,Team> group5 = new HashMap<>();
-            group5.put("G5T1", new Team("G5T1", 9, true, ""));
-            group5.put("G5T2", new Team("G5T2", 9, true, ""));
-            group5.put("G5T3", new Team("G5T3", 12, true, ""));
+            createNewTeamInGroupWithSize(teamSizes, group5, "G5T1", 9);
+            createNewTeamInGroupWithSize(teamSizes, group5, "G5T2", 9);
+            createNewTeamInGroupWithSize(teamSizes, group5, "G5T3", 12);
             cachedSampleAllTeamByGroup.put("G5", group5);
 
             for(Map<String, Team> teams : cachedSampleAllTeamByGroup.values()) {
@@ -205,11 +175,11 @@ public class ConfigUtil {
                     t.setSplitOriginalName(t.getName());
                     String managerEmail = (faker.name().firstName()+"."+faker.name().lastName()+"@worldcompany.com").toLowerCase(Locale.ROOT);
                     t.setManagerEmail(managerEmail);
-                    for(int cpt = 0; cpt < t.getSize(); cpt++) {
+                    for(int cpt = 0; cpt < teamSizes.get(t.getName()); cpt++) {
                         String firstname = faker.name().firstName();
                         String lastname = faker.name().lastName();
                         String email = (firstname+"."+lastname+"@worldcompany.com").toLowerCase(Locale.ROOT);
-                        t.getMembers().add(new People(firstname, lastname, email));
+                        t.getMembers().add(new People(firstname, lastname, email, ReservationType.NORMAL));
                     }
                 }
             }
@@ -224,6 +194,18 @@ public class ConfigUtil {
             }
         }
         return result;
+    }
+
+    private static void createNewTeamInGroupWithSize(Map<String, Integer> teamSizes, Map<String, Team> group, String teamName, int size) {
+        Team team = new Team(teamName);
+        teamSizes.put(team.getName(), size);
+        group.put(teamName, team);
+    }
+
+    private static Team cloneTeamWithMandatory(Team t) {
+        Team clone = (Team)t.clone();
+        clone.getMembers().stream().forEach(p -> p.setReservationType(ReservationType.MANDATORY));
+        return clone;
     }
 
     /**
@@ -245,24 +227,24 @@ public class ConfigUtil {
 
         Map<Integer, List<Team>> days = new HashMap<>();
         days.put(1, new ArrayList<>());
-        days.get(1).addAll(groups.get("G1").values());
-        days.get(1).addAll(groups.get("G5").values());
+        days.get(1).addAll(groups.get("G1").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
+        days.get(1).addAll(groups.get("G5").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
 
         days.put(2, new ArrayList<>());
-        days.get(2).addAll(groups.get("G3").values());
-        days.get(2).addAll(groups.get("G4").values());
+        days.get(2).addAll(groups.get("G3").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
+        days.get(2).addAll(groups.get("G4").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
 
         days.put(3, new ArrayList<>());
-        days.get(3).addAll(groups.get("G1").values());
-        days.get(3).addAll(groups.get("G2").values());
+        days.get(3).addAll(groups.get("G1").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
+        days.get(3).addAll(groups.get("G2").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
 
         days.put(4, new ArrayList<>());
-        days.get(4).addAll(groups.get("G4").values());
-        days.get(4).addAll(groups.get("G5").values());
+        days.get(4).addAll(groups.get("G4").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
+        days.get(4).addAll(groups.get("G5").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
 
         days.put(5, new ArrayList<>());
-        days.get(5).addAll(groups.get("G2").values());
-        days.get(5).addAll(groups.get("G3").values());
+        days.get(5).addAll(groups.get("G2").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
+        days.get(5).addAll(groups.get("G3").values().stream().map(ConfigUtil::cloneTeamWithMandatory).toList());
 
         List<Team> teams = days.get(day);
 
@@ -272,17 +254,17 @@ public class ConfigUtil {
         int workingDays = 250;
         int vacations = 4*5 + 5; // 4 weeks + 5 sick days
         for(Team t: teams) {
-            int newSize = t.getSize();
-            for(int i = 0; i < t.getSize(); i++) {
+            int newSize = t.size();
+            for(int i = 0; i < t.size(); i++) {
                 boolean isOff = random.nextInt(workingDays) <= vacations;
                 if(isOff) {
                     newSize--;
                 }
             }
-            t.setSize(newSize);
+            t.setMembers(t.getMembers().subList(0, newSize));
         }
 
-        Integer mandatoryTotalSizeTeams = teams.stream().map(Team::getSize).reduce(0, Integer::sum);
+        Integer mandatoryTotalSizeTeams = teams.stream().map(Team::size).reduce(0, Integer::sum);
 
         // simulate additional people for optional day
         List<Team> allTeams = groups.values().stream()
@@ -298,17 +280,24 @@ public class ConfigUtil {
         int additionalPeople = 0;
         for(Team t : otherTeams) {
             // max 4 people of the same team are going to come the same optional day
-            t.setSize(random.nextInt(Math.min(t.getSize(), 4)));
-            t.setMembers(t.getMembers().subList(0, t.getSize()));
-            t.setMandatory(false);
+            int newSize = random.nextInt(Math.min(t.size(), 4));
+            t.setMembers(t.getMembers().subList(0, newSize));
+            t.setMembers(t.getMembers().stream().map(p -> {
+                People newP = (People)p.clone();
+                newP.setReservationType(ReservationType.OPTIONAL);
+                return newP;
+            }).toList());
             additionalTeams.add(t);
-            additionalPeople += t.getSize();
+            additionalPeople += t.size();
             if(additionalPeople >= toReach) {
                 break;
             }
         }
 
         teams.addAll(additionalTeams);
+
+        // remove empty teams
+        teams = teams.stream().filter(t -> t.size() > 0).toList();
 
         return teams;
     }
@@ -343,7 +332,14 @@ public class ConfigUtil {
                         }
                         peopleRows.put(p.getEmail(), currentPeopleRow);
                     }
-                    currentPeopleRow[4+day.getKey()] = t.isMandatory() ? "T" : "F";
+                    if(p.getReservationType().equals(ReservationType.MANDATORY)) {
+                        currentPeopleRow[4+day.getKey()] = "T";
+                    } else if(p.getReservationType().equals(ReservationType.NORMAL)) {
+                        currentPeopleRow[4+day.getKey()] = "F";
+                    } else {
+                        currentPeopleRow[4+day.getKey()] = "A";
+                    }
+
                 }
             }
         }
