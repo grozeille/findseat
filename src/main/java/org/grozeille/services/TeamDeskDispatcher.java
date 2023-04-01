@@ -71,6 +71,19 @@ public class TeamDeskDispatcher {
             dayDispatchResult.setNotAbleToDispatch(peopleWithoutDesks);
             dayDispatchResult.setDeskAssignedToPeople(deskPeopleMapping);
 
+            boolean mandatoryNotDispatched = dayDispatchResult.getNotAbleToDispatch().stream()
+                    .anyMatch(p -> p.getPeople().getReservationType().equals(ReservationType.MANDATORY));
+
+            boolean anyOptional = dayDispatchResult.getDeskAssignedToPeople().values().stream()
+                    .anyMatch(p -> p.getPeople().getReservationType().equals(ReservationType.OPTIONAL));
+
+            boolean normalNotDispatched = dayDispatchResult.getNotAbleToDispatch().stream()
+                    .anyMatch(p -> p.getPeople().getReservationType().equals(ReservationType.NORMAL));
+
+            if(mandatoryNotDispatched || (anyOptional && normalNotDispatched)) {
+                throw new RuntimeException("This is a bug");
+            }
+
             result.getDispatchPerDayOfWeek().put(day, dayDispatchResult);
         }
 
@@ -216,6 +229,7 @@ public class TeamDeskDispatcher {
                         anySkipped = true;
                     } else {
                         teamsToDispatch.add(team);
+                        remainingDesks -= team.size();
                     }
                     if (remainingDesks == 0) {
                         break;
@@ -224,8 +238,9 @@ public class TeamDeskDispatcher {
                 // if all remaining optional teams are too big to fit into the remaining space, split the first team
                 if (remainingDesks > 0 && anySkipped) {
                     Team team = optionalTeams.get(0);
-                    team.setMembers(team.getMembers().subList(0, remainingDesks));
+                    team.setMembers(team.getMembers().subList(0, Math.min(team.getMembers().size(), remainingDesks)));
                     teamsToDispatch.add(team);
+                    remainingDesks -= team.size();
                 }
             }
 
@@ -248,8 +263,7 @@ public class TeamDeskDispatcher {
         log.info(CONSOLE_SEPARATOR);
         log.info("Day: " + day);
 
-        final Integer totalSizeForAllRooms = rooms.stream().mapToInt(Room::roomSize).sum();
-        Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
+        Integer totalSizeForAllRooms = rooms.stream().mapToInt(Room::roomSize).sum();
 
         final Integer totalSizeTeams = teams.stream().mapToInt(Team::size).sum();
 
@@ -269,6 +283,27 @@ public class TeamDeskDispatcher {
         // Random for each run ?
         //Collections.shuffle(teams);
 
+        // if not enough people for the floor, remove the smallest rooms
+        if(totalSizeTeams < totalSizeForAllRooms) {
+            // try by removing the smallest room
+            List<Room> roomSortedBySize = rooms.stream().sorted(Comparator.comparing(Room::roomSize)).toList();
+            for(Room r : roomSortedBySize) {
+                rooms.remove(r);
+                totalSizeForAllRooms = rooms.stream().mapToInt(Room::roomSize).sum();
+                if(totalSizeTeams.equals(totalSizeForAllRooms)) {
+                    break;
+                } else if(totalSizeTeams > totalSizeForAllRooms) {
+                    // rollback, add the room because it's needed to fit all
+                    rooms.add(r);
+                    totalSizeForAllRooms = rooms.stream().mapToInt(Room::roomSize).sum();
+                    break;
+                }
+            }
+
+        }
+        Map<String, Room> roomsByName = rooms.stream().collect(Collectors.toMap(Room::getName, Function.identity()));
+
+        // select the people who can come that day based on priority
         Pair<LinkedList<Team>, List<Team>> floorDispatchResult = tryToFillTheFloor(teams, totalSizeForAllRooms);
         LinkedList<Team> teamsToDispatch = floorDispatchResult.getLeft();
 

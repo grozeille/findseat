@@ -339,11 +339,11 @@ public class ConfigUtil {
                         peopleRows.put(p.getEmail(), currentPeopleRow);
                     }
                     if(p.getReservationType().equals(ReservationType.MANDATORY)) {
-                        currentPeopleRow[4+day.getKey()] = "T";
+                        currentPeopleRow[4+day.getKey()] = DAY_CODE_TEAMDAY;
                     } else if(p.getReservationType().equals(ReservationType.NORMAL)) {
-                        currentPeopleRow[4+day.getKey()] = "F";
+                        currentPeopleRow[4+day.getKey()] = DAY_CODE_FLEX;
                     } else {
-                        currentPeopleRow[4+day.getKey()] = "A";
+                        currentPeopleRow[4+day.getKey()] = DAY_CODE_ADDITIONAL;
                     }
 
                 }
@@ -460,7 +460,8 @@ public class ConfigUtil {
                                     .getDispatchPerDayOfWeek().get(day)
                                     .getDeskAssignedToPeople().get(currentCellValue);
                             if (peopleInTeam != null) {
-                                String newCellValue = peopleInTeam.getTeam().getSplitOriginalName() + " " + peopleInTeam.getPeople().getEmail();
+                                String reservationTypeChar = reservationTypeToString(peopleInTeam.getPeople().getReservationType());
+                                String newCellValue = reservationTypeChar + " " + peopleInTeam.getTeam().getSplitOriginalName() + " " + peopleInTeam.getPeople().getEmail();
                                 cell.setCellValue(newCellValue);
 
                                 CellStyle cellStyle = cell.getSheet().getWorkbook().createCellStyle();
@@ -501,14 +502,7 @@ public class ConfigUtil {
         List<String[]> output = new ArrayList<>();
 
         for(PeopleWithTeam pt : peopleWithoutDesk) {
-            String reservationTypeChar = "";
-            if(pt.getPeople().getReservationType().equals(ReservationType.MANDATORY)) {
-                reservationTypeChar = "T";
-            } else if(pt.getPeople().getReservationType().equals(ReservationType.NORMAL)) {
-                reservationTypeChar = "F";
-            } else if(pt.getPeople().getReservationType().equals(ReservationType.OPTIONAL)) {
-                reservationTypeChar = "A";
-            }
+            String reservationTypeChar = reservationTypeToString(pt.getPeople().getReservationType());
             output.add(new String[]{pt.getPeople().getEmail(), reservationTypeChar, pt.getTeam().getSplitOriginalName()});
             log.info("People without desk: " + pt);
         }
@@ -517,6 +511,18 @@ public class ConfigUtil {
         } catch (IOException e) {
             throw new RuntimeException("Not able to write output CSV", e);
         }
+    }
+
+    private static String reservationTypeToString(ReservationType reservationType) {
+        String reservationTypeChar = "";
+        if(reservationType.equals(ReservationType.MANDATORY)) {
+            reservationTypeChar = DAY_CODE_TEAMDAY;
+        } else if(reservationType.equals(ReservationType.NORMAL)) {
+            reservationTypeChar = DAY_CODE_FLEX;
+        } else if(reservationType.equals(ReservationType.OPTIONAL)) {
+            reservationTypeChar = DAY_CODE_ADDITIONAL;
+        }
+        return reservationTypeChar;
     }
 
 
