@@ -6,6 +6,7 @@ import java.util.*;
 
 import org.grozeille.model.People;
 import org.grozeille.model.Team;
+import org.grozeille.util.ConfigUtil;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,7 +31,7 @@ public class ExportAllPeopleTest {
 
         // Call the method being tested
         int day = 3; // Wednesday
-        App.exportAllPeople(teams, day, Paths.get(TARGET_TESTS));
+        ConfigUtil.exportAllPeople(day, teams, Paths.get(TARGET_TESTS));
 
         // Verify that the output file was created and contains the expected data
         String outputFilename = TARGET_TESTS + "/all_people_WEDNESDAY.csv";
@@ -51,7 +52,7 @@ public class ExportAllPeopleTest {
 
         // Call the method being tested
         int day = 6; // Saturday
-        App.exportAllPeople(teams, day, Paths.get(TARGET_TESTS));
+        ConfigUtil.exportAllPeople(day, teams, Paths.get(TARGET_TESTS));
 
         // Verify that the output file was created but is empty
         String outputFilename = TARGET_TESTS + "/all_people_SATURDAY.csv";
@@ -74,7 +75,7 @@ public class ExportAllPeopleTest {
         assertThrows(RuntimeException.class, () -> {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             System.setOut(new PrintStream(out));
-            App.exportAllPeople(teams, day, Paths.get(TARGET_TESTS));
+            ConfigUtil.exportAllPeople(day, teams, Paths.get(TARGET_TESTS));
         });
     }
 }

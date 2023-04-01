@@ -3,23 +3,29 @@ package org.grozeille.util;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVWriter;
 import com.opencsv.exceptions.CsvValidationException;
+import lombok.extern.slf4j.Slf4j;
 import net.datafaker.Faker;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFColor;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.grozeille.App;
-import org.grozeille.model.People;
-import org.grozeille.model.ReservationType;
-import org.grozeille.model.Room;
-import org.grozeille.model.Team;
+import org.grozeille.model.*;
 
 import java.io.*;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.DayOfWeek;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
+@Slf4j
 public class ConfigUtil {
 
     public static final String DAY_CODE_TEAMDAY = "T";
@@ -413,4 +419,138 @@ public class ConfigUtil {
             throw new RuntimeException("Not able to load "+fileName, e);
         }
     }
+
+    public static void exportToExcelFloorMap(WeekDispatchResult deskPeopleMappingPerDay, Path parentDirectory) {
+        try {
+            Files.createDirectories(parentDirectory);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+            URL resource = App.class.getClassLoader().getResource("floor_mapping.xlsx");
+            FileInputStream file = new FileInputStream(new File(resource.toURI()));
+            Workbook workbook = new XSSFWorkbook(file);
+
+            for (int day = 1; day <= 5; day++) {
+                // create a mapping of team/color
+                String[] colors = new String[]{"#838CA9", "#A4D78D", "#FFE485", "#FFC598", "#E58787", "#98EBEC", "#70A3CA", "#6994AE", "#FACF7F", "#F7A072", "#FF0F80", "#2B50AA", "#FF9FE5", "#FFD4D4", "#FF858D"};
+
+                Map<String, String> teamColorMap = new HashMap<>();
+                List<Team> allDispatchedTeams = deskPeopleMappingPerDay
+                        .getDispatchPerDayOfWeek().get(day)
+                        .getDeskAssignedToPeople().values().stream()
+                        .map(PeopleWithTeam::getTeam)
+                        .distinct()
+                        .toList();
+                for (int i = 0; i < allDispatchedTeams.size(); i++) {
+                    teamColorMap.put(allDispatchedTeams.get(i).getSplitOriginalName(), colors[i % colors.length]);
+                }
+
+                // clone the floor plan for a specific day to replace desk names by the assigned people
+                workbook.cloneSheet(0);
+                workbook.setSheetName(workbook.getNumberOfSheets() - 1, DayOfWeek.of(day).name());
+
+                Sheet sheet = workbook.getSheetAt(workbook.getNumberOfSheets() - 1);
+                for (Row row : sheet) {
+                    for (Cell cell : row) {
+                        String currentCellValue = cell.getStringCellValue();
+                        if (!currentCellValue.isEmpty()) {
+                            PeopleWithTeam peopleInTeam = deskPeopleMappingPerDay
+                                    .getDispatchPerDayOfWeek().get(day)
+                                    .getDeskAssignedToPeople().get(currentCellValue);
+                            if (peopleInTeam != null) {
+                                String newCellValue = peopleInTeam.getTeam().getSplitOriginalName() + " " + peopleInTeam.getPeople().getEmail();
+                                cell.setCellValue(newCellValue);
+
+                                CellStyle cellStyle = cell.getSheet().getWorkbook().createCellStyle();
+
+                                String hexaColor = teamColorMap.get(peopleInTeam.getTeam().getSplitOriginalName());
+                                XSSFColor color = new XSSFColor(hexaToRgb(hexaColor));
+
+                                cellStyle.setFillForegroundColor(color);
+                                cellStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+                                cell.setCellStyle(cellStyle);
+                            } else {
+                                cell.setCellValue("EMPTY");
+                            }
+                        }
+                    }
+                }
+            }
+
+            File floorPlanOutputExcelFile = new File(parentDirectory + File.separator +"output.xlsx");
+            if (floorPlanOutputExcelFile.exists()) {
+                floorPlanOutputExcelFile.delete();
+            }
+            workbook.write(new FileOutputStream(floorPlanOutputExcelFile));
+
+        } catch (IOException | URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
+    public static void exportPeopleWithoutDesk(int day, List<PeopleWithTeam> peopleWithoutDesk, Path parentDirectory) {
+        try {
+            Files.createDirectories(parentDirectory);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<String[]> output = new ArrayList<>();
+
+        for(PeopleWithTeam pt : peopleWithoutDesk) {
+            String reservationTypeChar = "";
+            if(pt.getPeople().getReservationType().equals(ReservationType.MANDATORY)) {
+                reservationTypeChar = "T";
+            } else if(pt.getPeople().getReservationType().equals(ReservationType.NORMAL)) {
+                reservationTypeChar = "F";
+            } else if(pt.getPeople().getReservationType().equals(ReservationType.OPTIONAL)) {
+                reservationTypeChar = "A";
+            }
+            output.add(new String[]{pt.getPeople().getEmail(), reservationTypeChar, pt.getTeam().getSplitOriginalName()});
+            log.info("People without desk: " + pt);
+        }
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter(parentDirectory + File.separator +"people_without_desk_" + DayOfWeek.of(day).name() + ".csv"))) {
+            csvWriter.writeAll(output);
+        } catch (IOException e) {
+            throw new RuntimeException("Not able to write output CSV", e);
+        }
+    }
+
+
+    public static void exportAllPeople(int day, List<Team> teams, Path parentDirectory){
+        try {
+            Files.createDirectories(parentDirectory);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        List<String[]> output = new ArrayList<>();
+        //header
+        output.add(new String[]{"name", "email"});
+        for (Team t : teams) {
+            for (People p : t.getMembers()) {
+                output.add(new String[]{t.getName(), p.getEmail()});
+            }
+        }
+        try (CSVWriter csvWriter = new CSVWriter(new FileWriter(parentDirectory + File.separator + "all_people_" + DayOfWeek.of(day).name() + ".csv"))) {
+            csvWriter.writeAll(output);
+        } catch (IOException e) {
+            throw new RuntimeException("Not able to write output CSV", e);
+        }
+    }
+
+    static byte[] hexaToRgb(String hexaColor) {
+        if (hexaColor.startsWith("#")) {
+            hexaColor = hexaColor.substring(1);
+        }
+        int resultRed = Integer.valueOf(hexaColor.substring(0, 2), 16);
+        int resultGreen = Integer.valueOf(hexaColor.substring(2, 4), 16);
+        int resultBlue = Integer.valueOf(hexaColor.substring(4, 6), 16);
+
+        return new byte[]{(byte) resultRed, (byte) resultGreen, (byte) resultBlue};
+    }
+
 }
