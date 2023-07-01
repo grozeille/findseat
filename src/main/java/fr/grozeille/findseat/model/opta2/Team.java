@@ -11,7 +11,7 @@ import org.optaplanner.core.api.domain.variable.PlanningVariable;
 @AllArgsConstructor
 @NoArgsConstructor
 @PlanningEntity
-public class Team {
+public class Team implements Cloneable {
     @PlanningId
     private Long id;
 
@@ -32,5 +32,20 @@ public class Team {
         this.wantMonitoringScreen = wantMonitoringScreen;
         this.isMandatory = isMandatory;
         this.size = size;
+    }
+
+    @Override
+    public Team clone() {
+        try {
+            Team clone = (Team) super.clone();
+            clone.setId(this.id);
+            clone.setName(this.name);
+            clone.setWantMonitoringScreen(this.wantMonitoringScreen);
+            clone.setIsMandatory(this.isMandatory);
+            clone.setSize(this.size);
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError();
+        }
     }
 }

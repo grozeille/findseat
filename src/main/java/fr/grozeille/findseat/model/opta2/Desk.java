@@ -11,7 +11,7 @@ public class Desk {
 
     private String row;
 
-    private Integer number;
+    private String number;
 
     private Boolean[] withMonitoringScreens;
 
@@ -22,14 +22,14 @@ public class Desk {
     private Integer endOfOpenSpace;
 
     public String toDeskNumber() {
-        return deskGroup + row + String.format("%03d", number);
+        return deskGroup + row + number;
     }
 
     public Desk() {
 
     }
 
-    public Desk(Long id, String deskGroup, String row, Integer number, Boolean[] withMonitoringScreens, Integer endOfRow, Integer endOfDeskGroup, Integer endOfOpenSpace) {
+    public Desk(Long id, String deskGroup, String row, String number, Boolean[] withMonitoringScreens, Integer endOfRow, Integer endOfDeskGroup, Integer endOfOpenSpace) {
         this.id = id;
         this.deskGroup = deskGroup;
         this.row = row;

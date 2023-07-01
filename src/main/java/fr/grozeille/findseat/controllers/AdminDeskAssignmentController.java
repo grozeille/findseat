@@ -42,15 +42,23 @@ public class AdminDeskAssignmentController {
     @PostMapping("/desk-assignment/build")
     public ResponseEntity runDeskAssignment(@RequestParam(required = false, defaultValue = "30") long seconds) throws Exception {
         //buildDeskAssignment();
-        buildDeskAssignment2(seconds);
-        //buildDeskAssignment3(seconds);
+        //buildDeskAssignment2(seconds);
+        buildDeskAssignment3(seconds);
         return ResponseEntity.ok("OK");
     }
 
     private void buildDeskAssignment3(long timeout) throws Exception {
+        List<Room> rooms = configService.parseRoomsFile();
 
+        // read all booking files for next week
+        Map<Integer, List<Team>> teamsByDay = fileBookingService.readTeamForWeekFile();
 
-        OptaPlanner2SolutionService optaPlannerSolutionService = new OptaPlanner2SolutionService();
+        File outputFile = new File(fileBookingService.getOutputFolder(), FileBookingService.FILE_ALL_PEOPLE_WEEK);
+
+        // export the aggregated list of all booking
+        fileBookingService.writeTeamForWeekFile(teamsByDay, outputFile);
+
+        OptaPlanner2SolutionService optaPlannerSolutionService = new OptaPlanner2SolutionService(rooms, teamsByDay);
 
         WeekDispatchResult dispatchResult = optaPlannerSolutionService.plan(timeout);
 
