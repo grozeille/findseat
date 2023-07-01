@@ -1,21 +1,15 @@
 package fr.grozeille.findseat.controllers;
 
-import fr.grozeille.findseat.model.*;
-import fr.grozeille.findseat.model.opta.*;
-import fr.grozeille.findseat.model.opta.People;
-import fr.grozeille.findseat.model.opta2.Desk;
+import fr.grozeille.findseat.model.DayDispatchResult;
+import fr.grozeille.findseat.model.Room;
+import fr.grozeille.findseat.model.Team;
+import fr.grozeille.findseat.model.WeekDispatchResult;
+import fr.grozeille.findseat.model.opta.OptaPlannerSolutionService;
 import fr.grozeille.findseat.model.opta2.OptaPlanner2SolutionService;
-import fr.grozeille.findseat.model.opta2.TeamDeskAssignmentConstraintProvider;
-import fr.grozeille.findseat.model.opta2.TeamDeskAssignmentSolution;
 import fr.grozeille.findseat.services.ConfigService;
 import fr.grozeille.findseat.services.FileBookingService;
 import fr.grozeille.findseat.services.TeamDeskDispatcher;
 import lombok.extern.slf4j.Slf4j;
-import net.datafaker.Faker;
-import org.optaplanner.core.api.solver.Solver;
-import org.optaplanner.core.api.solver.SolverFactory;
-import org.optaplanner.core.config.solver.SolverConfig;
-import org.optaplanner.core.config.solver.termination.TerminationConfig;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -23,9 +17,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.time.Duration;
-import java.util.*;
-import java.util.stream.Stream;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @Slf4j
