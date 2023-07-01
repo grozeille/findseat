@@ -1,4 +1,4 @@
-package fr.grozeille.findseat.model.opta;
+package fr.grozeille.findseat.model.opta2;
 
 import lombok.Data;
 import org.optaplanner.core.api.domain.solution.PlanningEntityCollectionProperty;
@@ -13,23 +13,22 @@ import java.util.List;
 
 @PlanningSolution
 @Data
-public class DeskAssignmentSolution {
-
-    @ValueRangeProvider
-    @ProblemFactCollectionProperty
-    private List<People> people = new ArrayList<>();
-
-    @PlanningEntityCollectionProperty
-    private List<DeskAssignment> deskAssignments = new ArrayList<>();
+public class TeamDeskAssignmentSolution {
 
     @PlanningScore
     private HardMediumSoftScore score;
 
-    public DeskAssignmentSolution() {
-    }
+    @PlanningEntityCollectionProperty
+    private List<Team> teams = new ArrayList<>();
 
-    public DeskAssignmentSolution(List<People> people, List<DeskAssignment> deskAssignments) {
-        this.people = people;
-        this.deskAssignments = deskAssignments;
+    @ValueRangeProvider
+    @ProblemFactCollectionProperty
+    private List<Desk> desks = new ArrayList<>();
+
+    public TeamDeskAssignmentSolution() {}
+
+    public TeamDeskAssignmentSolution(List<Team> teams, List<Desk> desks) {
+        this.teams = teams;
+        this.desks = desks;
     }
 }

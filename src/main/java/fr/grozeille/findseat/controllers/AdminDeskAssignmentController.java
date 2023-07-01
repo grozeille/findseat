@@ -3,6 +3,9 @@ package fr.grozeille.findseat.controllers;
 import fr.grozeille.findseat.model.*;
 import fr.grozeille.findseat.model.opta.*;
 import fr.grozeille.findseat.model.opta.People;
+import fr.grozeille.findseat.model.opta2.Desk;
+import fr.grozeille.findseat.model.opta2.TeamDeskAssignmentConstraintProvider;
+import fr.grozeille.findseat.model.opta2.TeamDeskAssignmentSolution;
 import fr.grozeille.findseat.services.ConfigService;
 import fr.grozeille.findseat.services.FileBookingService;
 import fr.grozeille.findseat.services.TeamDeskDispatcher;
@@ -21,6 +24,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.time.Duration;
 import java.util.*;
+import java.util.stream.Stream;
 
 @RestController
 @Slf4j
@@ -44,8 +48,179 @@ public class AdminDeskAssignmentController {
     @PostMapping("/desk-assignment/build")
     public ResponseEntity runDeskAssignment(@RequestParam(required = false, defaultValue = "30") long seconds) throws Exception {
         //buildDeskAssignment();
-        buildDeskAssignment2(seconds);
+        //buildDeskAssignment2(seconds);
+        buildDeskAssignment3(seconds);
         return ResponseEntity.ok("OK");
+    }
+
+    private void buildDeskAssignment3(long timeout) throws Exception {
+
+        List<Desk> desks = new ArrayList<>();
+
+        Object[] deskGroups = new Object[]{
+                new Object[] {
+                        "A",
+                        new Object[] {
+                                new Object[]{"A", 3},
+                                new Object[]{"B", 3},
+                        }
+                },
+                new Object[] {
+                        "B",
+                        new Object[] {
+                                new Object[]{"A", 3},
+                                new Object[]{"B", 6},
+                                new Object[]{"C", 6},
+                                new Object[]{"D", 3},
+
+                        }
+                },
+                new Object[] {
+                        "C",
+                        new Object[] {
+                                new Object[]{"A", 5},
+                                new Object[]{"B", 10},
+                                new Object[]{"C", 10},
+                                new Object[]{"D", 9},
+                                new Object[]{"E", 5}
+
+                        }
+                }
+        };
+        Integer[] monitoringScreens = new Integer[] { 7,8,9,10,11,12};
+        Integer totalDesks = Arrays.stream(deskGroups)
+                .map(g -> ((Object[])g)[1])
+                .flatMap(g -> Stream.of((Object[])g))
+                .map(o -> (int)((Object[])o)[1])
+                .reduce(0, Integer::sum);
+        Boolean[] withMonitoringScreen = new Boolean[totalDesks];
+        for(int indexWithMonitoringScreen : monitoringScreens) {
+            withMonitoringScreen[indexWithMonitoringScreen-1] = true;
+        }
+        long cptDeskId = 0;
+        for(Object g : deskGroups) {
+            String group = (String) ((Object[]) g)[0];
+            Object[] rows = (Object[]) ((Object[]) g)[1];
+            int groupSize = Arrays.stream(rows).map(o -> (int)((Object[])o)[1]).reduce(0, Integer::sum);
+
+            for (Object r : rows) {
+                String row = (String) ((Object[]) r)[0];
+                int deskNb = (int) ((Object[]) r)[1];
+
+                int endOfRow = (int)cptDeskId + deskNb;
+                int endOfDeskGroup = (int)cptDeskId + groupSize;
+
+                for (int cpt = 1; cpt <= deskNb; cpt++) {
+                    Desk d = new Desk(
+                            cptDeskId,
+                            group,
+                            row,
+                            cpt,
+                            Arrays.copyOfRange(withMonitoringScreen, (int) cptDeskId, withMonitoringScreen.length),
+                            endOfRow,
+                            endOfDeskGroup,
+                            totalDesks);
+                    desks.add(d);
+                    cptDeskId++;
+                }
+            }
+        }
+
+        List<fr.grozeille.findseat.model.opta2.Team> teams = new ArrayList<>();
+
+        int[] teamSizes = new int[] {
+                6,4,6,5,7,5,6,6,6,7
+        };
+
+        long cptTeam = 0;
+        for(int s : teamSizes) {
+            fr.grozeille.findseat.model.opta2.Team t = new fr.grozeille.findseat.model.opta2.Team(
+                    cptTeam++,
+                    Long.toString(cptTeam),
+                    0,
+                    true,
+                    s);
+            teams.add(t);
+        }
+
+        int otherPeople = totalDesks - teams.stream()
+                .map(fr.grozeille.findseat.model.opta2.Team::getSize)
+                .reduce(0, Integer::sum) + 10;
+
+        final Random random = new Random();
+        while(otherPeople > 0) {
+            int teamSize = Math.min(random.nextInt(3)+1, otherPeople);
+            fr.grozeille.findseat.model.opta2.Team t = new fr.grozeille.findseat.model.opta2.Team(
+                    cptTeam++,
+                    Long.toString(cptTeam),
+                    0,
+                    false,
+                    teamSize);
+            teams.add(t);
+            otherPeople -= teamSize;
+        }
+
+        final SolverConfig solverConfig = new SolverConfig()
+                .withSolutionClass(TeamDeskAssignmentSolution.class)
+                .withEntityClasses(fr.grozeille.findseat.model.opta2.Team.class)
+                .withConstraintProviderClass(TeamDeskAssignmentConstraintProvider.class)
+                .withTerminationSpentLimit(Duration.ofSeconds(timeout));
+
+        Map<Integer, TeamDeskAssignmentSolution> solutionsPerWeek = new HashMap<>();
+
+        List<Integer> days = Arrays.asList(1, 2, 3, 4, 5);
+        List<Map.Entry<Integer, TeamDeskAssignmentSolution>> weekSimulationResults = days.parallelStream().map(day -> {
+            TeamDeskAssignmentSolution problem = new TeamDeskAssignmentSolution(teams, desks);
+
+            SolverFactory<TeamDeskAssignmentSolution> solverFactory = SolverFactory.create(solverConfig.withRandomSeed(random.nextLong()));
+            Solver<TeamDeskAssignmentSolution> solver = solverFactory.buildSolver();
+
+            TeamDeskAssignmentSolution solution = solver.solve(problem);
+            return Map.entry(day, solution);
+        }).toList();
+
+        for(Map.Entry<Integer, TeamDeskAssignmentSolution> e : weekSimulationResults) {
+            solutionsPerWeek.put(e.getKey(), e.getValue());
+        }
+
+        Faker faker = new Faker();
+        WeekDispatchResult dispatchResult = new WeekDispatchResult();
+        for(int day = 1; day <= 5; day++) {
+            TeamDeskAssignmentSolution solution = solutionsPerWeek.get(day);
+            // convert to the other legacy data model
+
+            DayDispatchResult dayDispatchResult = new DayDispatchResult();
+            for(fr.grozeille.findseat.model.opta2.Team t : solution.getTeams()) {
+                for(int cptMemberInTeam = 0; cptMemberInTeam < t.getSize(); cptMemberInTeam++) {
+                    PeopleWithTeam peopleWithTeam = new PeopleWithTeam();
+                    peopleWithTeam.setPeople(new fr.grozeille.findseat.model.People());
+                    peopleWithTeam.setTeam(new Team());
+                    peopleWithTeam.getTeam().setName(t.getName());
+                    peopleWithTeam.getTeam().setSplitOriginalName(t.getName());
+                    peopleWithTeam.getTeam().setSplitTeam(false);
+                    peopleWithTeam.getPeople().setEmail(faker.name().username());
+                    peopleWithTeam.getPeople().setBookingType(t.getIsMandatory() ? BookingType.MANDATORY : BookingType.OPTIONAL);
+
+                    if(t.getDesk() != null) {
+                        int currentDeskIndex = Math.toIntExact(t.getDesk().getId()) + cptMemberInTeam;
+                        if(currentDeskIndex >= totalDesks) {
+                            dayDispatchResult.getNotAbleToDispatch().add(peopleWithTeam);
+                        } else {
+                            Desk currentDesk = solution.getDesks().get(currentDeskIndex);
+                            String deskNumber = currentDesk.toDeskNumber();
+                            dayDispatchResult.getDeskAssignedToPeople().put(deskNumber, peopleWithTeam);
+                        }
+
+                    } else {
+                        dayDispatchResult.getNotAbleToDispatch().add(peopleWithTeam);
+                    }
+                }
+            }
+            dispatchResult.getDispatchPerDayOfWeek().put(day, dayDispatchResult);
+            fileBookingService.exportPeopleWithoutDesk(day, dayDispatchResult.getNotAbleToDispatch());
+        }
+
+        fileBookingService.exportToExcelFloorMap(dispatchResult);
     }
 
     private void buildDeskAssignment2(long timeout) throws Exception {
