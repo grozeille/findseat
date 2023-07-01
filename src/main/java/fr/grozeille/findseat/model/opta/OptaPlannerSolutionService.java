@@ -12,21 +12,81 @@ import java.util.*;
 public class OptaPlannerSolutionService {
     private final Map<Integer, DeskAssignmentSolution> solutionsPerWeek = new HashMap<>();
 
-    private final List<DeskAssignment> deskAssignments = new ArrayList<>();
+    private final Map<Integer, List<DeskAssignment>> deskAssignmentsPerWeek = new HashMap<>();
 
-    private final List<People> people = new ArrayList<>();
+    private final Map<Integer, List<People>> peoplePerWeek = new HashMap<>();
 
     private final Random random = new Random();
 
+    public OptaPlannerSolutionService() {
+        buildSampleModel();
+    }
+
+    public OptaPlannerSolutionService(List<Room> rooms, Map<Integer, List<Team>> teamsByDay) {
+        List<DeskAssignment> deskAssignments = new ArrayList<>();
+        long cptDesk = 0;
+        for(Room r : rooms) {
+            for(Map.Entry<String, List<String>> row : r.getDesksGroups().entrySet()) {
+                for(String deskNb : row.getValue()) {
+                    DeskAssignment deskAssignment = new DeskAssignment(
+                            cptDesk++,
+                            r.getName(),
+                            row.getKey(),
+                            deskNb,
+                            false,
+                            false);
+                    deskAssignments.add(deskAssignment);
+                }
+            }
+        }
+        long totalDesks = cptDesk;
+
+        for(int day : teamsByDay.keySet()) {
+
+            List<Team> teams = teamsByDay.get(day);
+            Integer totalPeople = teams.stream().map(Team::size).reduce(0, Integer::sum);
+
+            List<DeskAssignment> deskAssignmentsForTheDay = new ArrayList<>();
+            for(DeskAssignment d : deskAssignments) {
+                deskAssignmentsForTheDay.add(d.clone());
+            }
+
+            // add missing desks (fake)
+            cptDesk = totalDesks;
+            int missingDesksTotal = Math.toIntExact(Math.min(totalPeople - totalDesks, 0));
+            for(int cpt = 0; cpt < missingDesksTotal; cpt++) {
+                DeskAssignment deskAssignment = new DeskAssignment(
+                        cptDesk++,
+                        "E",
+                        "E",
+                        Integer.toString(cpt),
+                        false,
+                        true);
+                deskAssignmentsForTheDay.add(deskAssignment);
+            }
+
+            deskAssignmentsPerWeek.put(day, deskAssignmentsForTheDay);
+
+            List<People> peopleForTheDay = new ArrayList<>();
+            for(Team t : teams) {
+                for(fr.grozeille.findseat.model.People p1 : t.getMembers()) {
+                    People p2 = new People(p1.getEmail(), t.getName(), false, p1.getBookingType().equals(BookingType.MANDATORY));
+                    peopleForTheDay.add(p2);
+                }
+            }
+
+            peoplePerWeek.put(day, peopleForTheDay);
+        }
+    }
+
     public WeekDispatchResult plan(long timeout) {
-        buildModel();
         resolve(timeout);
         return convertResultModel();
     }
 
-    private void buildModel() {
-        deskAssignments.clear();
-        people.clear();
+    private void buildSampleModel() {
+        List<DeskAssignment> deskAssignments = new ArrayList<>();
+        List<People> people = new ArrayList<>();
 
         Object[] rows = new Object[]{
                 new Object[]{"A", 3, "A"},
@@ -47,7 +107,7 @@ public class OptaPlannerSolutionService {
             int deskNb = (int)((Object[])r)[1];
             String deskGroup = (String)((Object[])r)[2];
             for(int cpt = 1; cpt <= deskNb; cpt++) {
-                DeskAssignment d = new DeskAssignment(cptDeskId++, deskGroup, row, cpt, false, false);
+                DeskAssignment d = new DeskAssignment(cptDeskId++, deskGroup, row, String.format("%03d", cpt), false, false);
                 deskAssignments.add(d);
             }
         }
@@ -93,7 +153,16 @@ public class OptaPlannerSolutionService {
 
         int missingDesks = people.size() - deskAssignments.size();
         for(int cpt = 0; cpt <  missingDesks; cpt++) {
-            deskAssignments.add(new DeskAssignment(cptDeskId++, "E", "E", cpt, false, true));
+            deskAssignments.add(new DeskAssignment(cptDeskId++, "E", "E", String.format("%03d", cpt), false, true));
+        }
+
+        for(int day = 1; day <= 5; day++) {
+            List<DeskAssignment> deskAssignmentsForTheDay = new ArrayList<>();
+            for(DeskAssignment d : deskAssignments) {
+                deskAssignmentsForTheDay.add(d.clone());
+            }
+            this.deskAssignmentsPerWeek.put(day, deskAssignmentsForTheDay);
+            this.peoplePerWeek.put(day, people);
         }
     }
 
@@ -108,6 +177,8 @@ public class OptaPlannerSolutionService {
 
         List<Integer> days = Arrays.asList(1, 2, 3, 4, 5);
         List<Map.Entry<Integer, DeskAssignmentSolution>> weekSimulationResults = days.parallelStream().map(day -> {
+            List<People> people = this.peoplePerWeek.get(day);
+            List<DeskAssignment> deskAssignments = this.deskAssignmentsPerWeek.get(day);
             DeskAssignmentSolution problem = new DeskAssignmentSolution(people, deskAssignments);
 
             SolverFactory<DeskAssignmentSolution> solverFactory = SolverFactory.create(solverConfig.withRandomSeed(random.nextLong()));
@@ -129,7 +200,7 @@ public class OptaPlannerSolutionService {
             // convert to the other legacy data model
             DayDispatchResult dayDispatchResult = new DayDispatchResult();
             for(DeskAssignment d : solution.getDeskAssignments()) {
-                String deskNumber = d.toDeskNumber();
+                String deskNumber = d.getNumber();
                 PeopleWithTeam peopleWithTeam = new PeopleWithTeam();
                 peopleWithTeam.setPeople(new fr.grozeille.findseat.model.People());
                 peopleWithTeam.setTeam(new Team());

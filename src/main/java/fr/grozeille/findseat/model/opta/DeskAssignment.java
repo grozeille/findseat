@@ -7,7 +7,7 @@ import org.optaplanner.core.api.domain.variable.PlanningVariable;
 
 @PlanningEntity
 @Data
-public class DeskAssignment {
+public class DeskAssignment implements Cloneable {
 
     @PlanningId
     private Long id;
@@ -17,7 +17,7 @@ public class DeskAssignment {
 
     private String row;
 
-    private Integer number;
+    private String number;
 
     private String deskGroup;
 
@@ -26,19 +26,36 @@ public class DeskAssignment {
     private Boolean doesNotExists;
 
     public String toDeskNumber() {
-        return deskGroup + row + String.format("%03d", number);
+        return deskGroup + row + number;
     }
 
     public DeskAssignment() {
 
     }
 
-    public DeskAssignment(Long id, String deskGroup, String row, Integer number, Boolean withMonitoringScreens, Boolean doesNotExists) {
+    public DeskAssignment(Long id, String deskGroup, String row, String number, Boolean withMonitoringScreens, Boolean doesNotExists) {
         this.id = id;
         this.deskGroup = deskGroup;
         this.row = row;
         this.number = number;
         this.withMonitoringScreens = withMonitoringScreens;
         this.doesNotExists = doesNotExists;
+    }
+
+    @Override
+    public DeskAssignment clone() {
+        try {
+            DeskAssignment clone = (DeskAssignment) super.clone();
+            clone.setId(this.id);
+            clone.setDeskGroup(this.getDeskGroup());
+            clone.setRow(this.getRow());
+            clone.setNumber(this.getNumber());
+            clone.setDoesNotExists(this.getDoesNotExists());
+            clone.setWithMonitoringScreens(this.getWithMonitoringScreens());
+            clone.setPeople(this.getPeople());
+            return clone;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError();
+        }
     }
 }

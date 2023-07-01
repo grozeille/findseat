@@ -42,8 +42,8 @@ public class AdminDeskAssignmentController {
     @PostMapping("/desk-assignment/build")
     public ResponseEntity runDeskAssignment(@RequestParam(required = false, defaultValue = "30") long seconds) throws Exception {
         //buildDeskAssignment();
-        //buildDeskAssignment2(seconds);
-        buildDeskAssignment3(seconds);
+        buildDeskAssignment2(seconds);
+        //buildDeskAssignment3(seconds);
         return ResponseEntity.ok("OK");
     }
 
@@ -64,8 +64,17 @@ public class AdminDeskAssignmentController {
     }
 
     private void buildDeskAssignment2(long timeout) throws Exception {
+        List<Room> rooms = configService.parseRoomsFile();
 
-        OptaPlannerSolutionService optaPlannerSolutionService = new OptaPlannerSolutionService();
+        // read all booking files for next week
+        Map<Integer, List<Team>> teamsByDay = fileBookingService.readTeamForWeekFile();
+
+        File outputFile = new File(fileBookingService.getOutputFolder(), FileBookingService.FILE_ALL_PEOPLE_WEEK);
+
+        // export the aggregated list of all booking
+        fileBookingService.writeTeamForWeekFile(teamsByDay, outputFile);
+
+        OptaPlannerSolutionService optaPlannerSolutionService = new OptaPlannerSolutionService(rooms, teamsByDay);
         WeekDispatchResult dispatchResult = optaPlannerSolutionService.plan(timeout);
 
         // for each day, export all people without desk
