@@ -1,11 +1,11 @@
 package fr.grozeille.findseat.model.opta2;
 
-import fr.grozeille.findseat.model.opta.DeskAssignment;
-import fr.grozeille.findseat.model.opta.DeskAssignmentConstraintProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
-import org.optaplanner.core.api.score.stream.*;
-import org.optaplanner.core.api.score.stream.bi.BiJoiner;
+import org.optaplanner.core.api.score.stream.Constraint;
+import org.optaplanner.core.api.score.stream.ConstraintFactory;
+import org.optaplanner.core.api.score.stream.ConstraintProvider;
+import org.optaplanner.core.api.score.stream.Joiners;
 
 import java.util.function.BiPredicate;
 import java.util.function.Function;
@@ -61,9 +61,7 @@ public class TeamDeskAssignmentConstraintProvider implements ConstraintProvider 
         return constraintFactory
                 .forEachIncludingNullVars(Team.class)
                 .filter(t -> t.getDesk() == null)
-                .map(t -> {
-                    return t.getSize();
-                })
+                .map(Team::getSize)
                 .penalize(HardMediumSoftScore.ONE_MEDIUM, s -> s)
                 .asConstraint("Should try to have the maximum of people on the floor");
     }
@@ -91,7 +89,7 @@ public class TeamDeskAssignmentConstraintProvider implements ConstraintProvider 
                 .forEachIncludingNullVars(Team.class)
                 .filter(t -> t.getIsMandatory() && t.getDesk() == null ||
                         t.getIsMandatory() && t.getSize() + t.getDesk().getId() > t.getDesk().getEndOfOpenSpace())
-                .penalize(HardMediumSoftScore.ONE_HARD, value -> value.getSize())
+                .penalize(HardMediumSoftScore.ONE_HARD, Team::getSize)
                 .asConstraint("All mandatory people must have a desk");
     }
 

@@ -73,7 +73,6 @@ public class OptaPlannerSolutionService {
         }
 
         int otherPeople = deskAssignments.size() - people.size() + 10;
-        final Random random = new Random();
         int cptInTeam = 0;
         int teamSize = random.nextInt(3)+1;
         cptTeam++;
@@ -138,7 +137,7 @@ public class OptaPlannerSolutionService {
                 peopleWithTeam.getTeam().setSplitTeam(false);
                 peopleWithTeam.getTeam().setSplitOriginalName(d.getPeople().getTeam());
                 peopleWithTeam.getPeople().setEmail(d.getPeople().getEmail());
-                peopleWithTeam.getPeople().setBookingType(d.getPeople().getIsMandatory() ? BookingType.MANDATORY : BookingType.OPTIONAL);
+                peopleWithTeam.getPeople().setBookingType(Boolean.TRUE.equals(d.getPeople().getIsMandatory()) ? BookingType.MANDATORY : BookingType.OPTIONAL);
 
                 if(d.getDeskGroup().equalsIgnoreCase("E")) {
                     dayDispatchResult.getNotAbleToDispatch().add(peopleWithTeam);

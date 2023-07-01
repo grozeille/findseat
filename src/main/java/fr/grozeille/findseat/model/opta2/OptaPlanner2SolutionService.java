@@ -48,7 +48,7 @@ public class OptaPlanner2SolutionService {
                     peopleWithTeam.getTeam().setSplitOriginalName(t.getName());
                     peopleWithTeam.getTeam().setSplitTeam(false);
                     peopleWithTeam.getPeople().setEmail(faker.name().username());
-                    peopleWithTeam.getPeople().setBookingType(t.getIsMandatory() ? BookingType.MANDATORY : BookingType.OPTIONAL);
+                    peopleWithTeam.getPeople().setBookingType(Boolean.TRUE.equals(t.getIsMandatory()) ? BookingType.MANDATORY : BookingType.OPTIONAL);
 
                     if(t.getDesk() != null) {
                         int currentDeskIndex = Math.toIntExact(t.getDesk().getId()) + cptMemberInTeam;
@@ -189,7 +189,6 @@ public class OptaPlanner2SolutionService {
                 .map(fr.grozeille.findseat.model.opta2.Team::getSize)
                 .reduce(0, Integer::sum) + 10;
 
-        final Random random = new Random();
         while(otherPeople > 0) {
             int teamSize = Math.min(random.nextInt(3)+1, otherPeople);
             fr.grozeille.findseat.model.opta2.Team t = new fr.grozeille.findseat.model.opta2.Team(

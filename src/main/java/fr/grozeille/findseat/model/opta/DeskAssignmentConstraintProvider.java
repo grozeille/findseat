@@ -2,7 +2,10 @@ package fr.grozeille.findseat.model.opta;
 
 import lombok.extern.slf4j.Slf4j;
 import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
-import org.optaplanner.core.api.score.stream.*;
+import org.optaplanner.core.api.score.stream.Constraint;
+import org.optaplanner.core.api.score.stream.ConstraintFactory;
+import org.optaplanner.core.api.score.stream.ConstraintProvider;
+import org.optaplanner.core.api.score.stream.Joiners;
 
 import java.util.function.BiPredicate;
 import java.util.function.Function;
